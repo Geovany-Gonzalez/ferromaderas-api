@@ -1,0 +1,105 @@
+// Prisma schema - Ferromaderas API
+// https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// npm run prisma:seed
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Roles y permisos (según imagen: Vendedor vs Administrador)
+// ---------------------------------------------------------------------------
+model Role {
+  id        String   @id @default(uuid())
+  slug      String   @unique // vendedor | administrador
+  name      String
+  createdAt DateTime @default(now())
+
+  users       User[]
+  permissions RolePermission[]
+  @@map("roles")
+}
+
+model Permission {
+  id   String @id @default(uuid())
+  slug String @unique // manage_products | manage_categories | manage_featured | view_quotes | manage_users
+  name String
+
+  roles RolePermission[]
+  @@map("permissions")
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+// ---------------------------------------------------------------------------
+// Usuarios
+// ---------------------------------------------------------------------------
+model User {
+  id                   String    @id @default(uuid())
+  email                String    @unique
+  username             String    @unique
+  passwordHash         String    @map("password_hash")
+  name                 String
+  phone                String?
+  profileImage         String?   @map("profile_image")
+  status               String    @default("activo") // activo | inactivo
+  mustChangePassword   Boolean   @default(false) @map("must_change_password")
+  lastLoginAt          DateTime? @map("last_login_at")
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  roleId String
+  role   Role   @relation(fields: [roleId], references: [id])
+
+  @@map("users")
+}
+
+// ---------------------------------------------------------------------------
+// Productos (futuro)
+// ---------------------------------------------------------------------------
+model Product {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  price       Decimal  @db.Decimal(10, 2)
+  categoryId  String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  category Category? @relation(fields: [categoryId], references: [id])
+
+  @@map("products")
+}
+
+// ---------------------------------------------------------------------------
+// Categorías (futuro)
+// ---------------------------------------------------------------------------
+model Category {
+  id        String   @id @default(uuid())
+  name      String
+  slug      String   @unique
+  parentId  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  parent   Category?  @relation("CategoryToCategory", fields: [parentId], references: [id])
+  children Category[] @relation("CategoryToCategory")
+  products Product[]
+
+  @@map("categories")
+}
