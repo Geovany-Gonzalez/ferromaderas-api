@@ -1,11 +1,9 @@
 // Prisma schema - Ferromaderas API
-// https://pris.ly/d/prisma-schema
+// Tablas en español en la base de datos
 
 generator client {
   provider = "prisma-client-js"
 }
-
-// npm run prisma:seed
 
 datasource db {
   provider = "postgresql"
@@ -13,13 +11,13 @@ datasource db {
 }
 
 // ---------------------------------------------------------------------------
-// Roles y permisos (según imagen: Vendedor vs Administrador)
+// Roles y permisos
 // ---------------------------------------------------------------------------
 model Role {
   id        String   @id @default(uuid())
-  slug      String   @unique // vendedor | administrador
+  slug      String   @unique
   name      String
-  createdAt DateTime @default(now())
+  createdAt DateTime @default(now()) @map("creado_en")
 
   users       User[]
   permissions RolePermission[]
@@ -28,22 +26,22 @@ model Role {
 
 model Permission {
   id   String @id @default(uuid())
-  slug String @unique // manage_products | manage_categories | manage_featured | view_quotes | manage_users
+  slug String @unique
   name String
 
   roles RolePermission[]
-  @@map("permissions")
+  @@map("permisos")
 }
 
 model RolePermission {
-  roleId       String
-  permissionId String
+  roleId       String @map("rol_id")
+  permissionId String @map("permiso_id")
 
   role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
   permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
 
   @@id([roleId, permissionId])
-  @@map("role_permissions")
+  @@map("rol_permisos")
 }
 
 // ---------------------------------------------------------------------------
@@ -57,49 +55,49 @@ model User {
   name                 String
   phone                String?
   profileImage         String?   @map("profile_image")
-  status               String    @default("activo") // activo | inactivo
+  status               String    @default("activo")
   mustChangePassword   Boolean   @default(false) @map("must_change_password")
   lastLoginAt          DateTime? @map("last_login_at")
-  createdAt            DateTime  @default(now())
-  updatedAt            DateTime  @updatedAt
+  createdAt            DateTime  @default(now()) @map("creado_en")
+  updatedAt            DateTime  @updatedAt @map("actualizado_en")
 
-  roleId String
+  roleId String @map("rol_id")
   role   Role   @relation(fields: [roleId], references: [id])
 
-  @@map("users")
+  @@map("usuarios")
 }
 
 // ---------------------------------------------------------------------------
-// Productos (futuro)
+// Categorías
+// ---------------------------------------------------------------------------
+model Category {
+  id        String   @id @default(uuid())
+  name      String
+  slug      String   @unique
+  parentId  String?  @map("padre_id")
+  createdAt DateTime @default(now()) @map("creado_en")
+  updatedAt DateTime @updatedAt @map("actualizado_en")
+
+  parent   Category?  @relation("CategoryToCategory", fields: [parentId], references: [id])
+  children Category[] @relation("CategoryToCategory")
+  products Product[]
+
+  @@map("categorias")
+}
+
+// ---------------------------------------------------------------------------
+// Productos
 // ---------------------------------------------------------------------------
 model Product {
   id          String   @id @default(uuid())
   name        String
   description String?
   price       Decimal  @db.Decimal(10, 2)
-  categoryId  String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  categoryId  String?  @map("categoria_id")
+  createdAt   DateTime @default(now()) @map("creado_en")
+  updatedAt   DateTime @updatedAt @map("actualizado_en")
 
   category Category? @relation(fields: [categoryId], references: [id])
 
-  @@map("products")
-}
-
-// ---------------------------------------------------------------------------
-// Categorías (futuro)
-// ---------------------------------------------------------------------------
-model Category {
-  id        String   @id @default(uuid())
-  name      String
-  slug      String   @unique
-  parentId  String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  parent   Category?  @relation("CategoryToCategory", fields: [parentId], references: [id])
-  children Category[] @relation("CategoryToCategory")
-  products Product[]
-
-  @@map("categories")
+  @@map("productos")
 }

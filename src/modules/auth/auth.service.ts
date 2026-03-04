@@ -63,18 +63,17 @@ export class AuthService {
     }
     const tempPassword = this.generateTempPassword();
     const hash = await bcrypt.hash(tempPassword, 10);
-    await this.users.updatePassword(user.id, hash);
+    await this.users.updatePassword(user.id, hash, true);
     const token = this.jwt.sign(
       { sub: user.id, purpose: 'force-password-change' },
       { expiresIn: '7d' },
     );
     const frontendUrl = this.config.get<string>('FRONTEND_URL') ?? 'http://localhost:4200';
     const changePasswordUrl = `${frontendUrl}/cambiar-password?token=${encodeURIComponent(token)}`;
-    try {
-      await this.mail.sendPasswordReset(user.email, user.username, tempPassword, changePasswordUrl);
-    } catch (err) {
-      console.error('[AuthService] Error enviando email de recuperación:', err);
-    }
+    // Envío en segundo plano para no bloquear la respuesta (evita que se cuelgue)
+    this.mail
+      .sendPasswordReset(user.email, user.username, tempPassword, changePasswordUrl)
+      .catch((err) => console.error('[AuthService] Error enviando email de recuperación:', err));
     return { message: msg };
   }
 

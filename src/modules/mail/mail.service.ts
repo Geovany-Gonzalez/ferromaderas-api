@@ -1,6 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import * as fs from 'fs';
+import * as path from 'path';
 import * as nodemailer from 'nodemailer';
+
+const LOGO_CID = 'logo@ferromaderas';
 
 @Injectable()
 export class MailService {
@@ -18,6 +22,12 @@ export class MailService {
         port: port ?? 587,
         secure: port === 465,
         auth: { user, pass },
+        connectionTimeout: 10000,
+        greetingTimeout: 10000,
+        tls: {
+          // En desarrollo permite certificados no verificados (proxy, etc.)
+          rejectUnauthorized: this.config.get<string>('NODE_ENV') === 'production',
+        },
       });
     }
   }
@@ -26,7 +36,40 @@ export class MailService {
     return this.config.get<string>('MAIL_FROM') ?? 'noreply@ferromaderas.com';
   }
 
-  private emailTemplate(title: string, body: string): string {
+  /** Ruta al logo (icono casa+herramientas). Se embute en el correo para que funcione sin URL externa. */
+  private get logoPath(): string {
+    const roots = [
+      path.join(process.cwd(), 'assets', 'icons', 'logo.png'),
+      path.join(__dirname, '..', '..', '..', 'assets', 'icons', 'logo.png'),
+    ];
+    for (const p of roots) {
+      if (fs.existsSync(p)) return p;
+    }
+    return '';
+  }
+
+  /** Adjuntos para incrustar el logo en el correo (evita depender de URL externa). */
+  private getLogoAttachments(): nodemailer.SendMailOptions['attachments'] {
+    const p = this.logoPath;
+    if (!p) return undefined;
+    try {
+      return [
+        {
+          filename: 'logo.png',
+          content: fs.readFileSync(p),
+          cid: LOGO_CID,
+        },
+      ];
+    } catch {
+      return undefined;
+    }
+  }
+
+  private emailTemplate(title: string, body: string, useEmbeddedLogo: boolean): string {
+    const logoHtml = useEmbeddedLogo
+      ? `<img src="cid:${LOGO_CID}" alt="" style="height:52px;width:auto;display:inline-block;vertical-align:middle;margin-right:12px;" /><span style="color:white;font-size:24px;font-weight:700;vertical-align:middle;">Ferro</span><span style="color:#f59e0b;font-size:24px;font-weight:700;vertical-align:middle;">Maderas</span>`
+      : `<span style="color:white;font-size:24px;font-weight:700;">Ferro</span><span style="color:#f59e0b;font-size:24px;font-weight:700;">Maderas</span>`;
+
     return `
 <!DOCTYPE html>
 <html>
@@ -35,24 +78,26 @@ export class MailService {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Ferromaderas</title>
 </head>
-<body style="margin:0;padding:0;font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:#f8fafc;">
+<body style="margin:0;padding:0;font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:#f8fafc;font-size:18px;">
   <table width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafc;padding:24px;">
     <tr>
       <td align="center">
-        <table width="100%" style="max-width:480px;background:white;border-radius:12px;box-shadow:0 4px 20px rgba(0,0,0,0.08);overflow:hidden;">
+        <table width="100%" style="max-width:520px;background:white;border-radius:12px;box-shadow:0 4px 20px rgba(0,0,0,0.08);overflow:hidden;">
           <tr>
-            <td style="background:#1e3a8a;padding:24px;text-align:center;">
-              <span style="color:white;font-size:20px;font-weight:700;">Ferro</span><span style="color:#f59e0b;font-size:20px;font-weight:700;">Maderas</span>
+            <td style="background:#1e3a8a;padding:28px 24px;text-align:center;">
+              ${logoHtml}
             </td>
           </tr>
           <tr>
-            <td style="padding:32px 24px;color:#334155;line-height:1.6;">
+            <td style="padding:36px 28px;color:#334155;line-height:1.7;font-size:18px;">
+              <div style="font-size:18px;">
               ${title}
               ${body}
+              </div>
             </td>
           </tr>
           <tr>
-            <td style="padding:16px 24px;background:#f8fafc;text-align:center;color:#64748b;font-size:12px;">
+            <td style="padding:20px 24px;background:#f8fafc;text-align:center;color:#64748b;font-size:14px;">
               © ${new Date().getFullYear()} Ferromaderas. Todos los derechos reservados.
             </td>
           </tr>
@@ -64,7 +109,13 @@ export class MailService {
 </html>`;
   }
 
-  async send(to: string, subject: string, text: string, html?: string): Promise<boolean> {
+  async send(
+    to: string,
+    subject: string,
+    text: string,
+    html?: string,
+    attachments?: nodemailer.SendMailOptions['attachments'],
+  ): Promise<boolean> {
     if (!this.transporter) {
       console.warn('[MailService] SMTP no configurado. Email no enviado:', { to, subject });
       return true; // No fallar en desarrollo
@@ -76,6 +127,7 @@ export class MailService {
         subject,
         text,
         html: html ?? text.replace(/\n/g, '<br>'),
+        attachments,
       });
       return true;
     } catch (err) {
@@ -95,18 +147,20 @@ export class MailService {
     }
     const subject = 'Credenciales - Ferromaderas Admin';
     const text = `Hola,\n\nTu usuario ha sido creado en el sistema Ferromaderas.\n\nUsuario: ${username}\nContraseña temporal: ${password}\n\nDebes cambiar tu contraseña antes de poder iniciar sesión. Haz clic en el siguiente enlace:\n${changePasswordUrl}\n\n— Ferromaderas`;
+    const hasLogo = !!this.logoPath;
     const html = this.emailTemplate(
-      '<p>Hola,</p><p>Tu usuario ha sido creado en el sistema <strong>Ferromaderas</strong>.</p>',
+      '<p style="font-size:20px;margin:0 0 16px;">Hola,</p><p style="font-size:18px;margin:0 0 16px;">Tu usuario ha sido creado en el sistema <strong>Ferromaderas</strong>.</p>',
       `
-        <p><strong>Usuario:</strong> <code style="background:#f1f5f9;padding:4px 8px;border-radius:4px;">${username}</code></p>
-        <p><strong>Contraseña temporal:</strong> <code style="background:#f1f5f9;padding:4px 8px;border-radius:4px;">${password}</code></p>
-        <p>Debes cambiar tu contraseña antes de poder iniciar sesión. Haz clic en el botón:</p>
-        <p style="text-align:center;margin:24px 0;">
-          <a href="${changePasswordUrl}" style="background:#1e3a8a;color:white!important;padding:12px 24px;text-decoration:none;border-radius:8px;display:inline-block;font-weight:600;">Cambiar contraseña</a>
+        <p style="font-size:18px;margin:0 0 16px;"><strong>Usuario:</strong> <code style="background:#f1f5f9;padding:8px 12px;border-radius:6px;font-size:18px;">${username}</code></p>
+        <p style="font-size:18px;margin:0 0 16px;"><strong>Contraseña temporal:</strong> <code style="background:#f1f5f9;padding:8px 12px;border-radius:6px;font-size:18px;">${password}</code></p>
+        <p style="font-size:18px;margin:0 0 20px;">Debes cambiar tu contraseña antes de poder iniciar sesión. Haz clic en el botón:</p>
+        <p style="text-align:center;margin:28px 0;">
+          <a href="${changePasswordUrl}" style="background:#1e3a8a;color:white!important;padding:14px 28px;text-decoration:none;border-radius:8px;display:inline-block;font-weight:600;font-size:18px;">Cambiar contraseña</a>
         </p>
       `,
+      hasLogo,
     );
-    return this.send(to, subject, text, html);
+    return this.send(to, subject, text, html, this.getLogoAttachments());
   }
 
   async sendPasswordReset(
@@ -117,18 +171,20 @@ export class MailService {
   ): Promise<boolean> {
     const subject = 'Recuperación de contraseña - Ferromaderas Admin';
     const text = `Hola ${username},\n\nSe ha generado una contraseña temporal para tu cuenta.\n\nContraseña temporal: ${tempPassword}\n\nDebes cambiarla antes de iniciar sesión. Haz clic en el enlace:\n${changePasswordUrl}\n\n— Ferromaderas`;
+    const hasLogo = !!this.logoPath;
     const html = this.emailTemplate(
-      `Hola <strong>${username}</strong>,`,
+      `<p style="font-size:20px;margin:0 0 16px;">Hola <strong>${username}</strong>,</p>`,
       `
-        <p>Se ha generado una contraseña temporal para tu cuenta.</p>
-        <p><strong>Contraseña temporal:</strong> <code style="background:#f1f5f9;padding:4px 8px;border-radius:4px;">${tempPassword}</code></p>
-        <p>Debes cambiarla antes de poder iniciar sesión. Haz clic en el botón:</p>
-        <p style="text-align:center;margin:24px 0;">
-          <a href="${changePasswordUrl}" style="background:#1e3a8a;color:white!important;padding:12px 24px;text-decoration:none;border-radius:8px;display:inline-block;font-weight:600;">Cambiar contraseña</a>
+        <p style="font-size:18px;margin:0 0 16px;">Se ha generado una contraseña temporal para tu cuenta.</p>
+        <p style="font-size:18px;margin:0 0 16px;"><strong>Contraseña temporal:</strong> <code style="background:#f1f5f9;padding:8px 12px;border-radius:6px;font-size:18px;">${tempPassword}</code></p>
+        <p style="font-size:18px;margin:0 0 20px;">Debes cambiarla antes de poder iniciar sesión. Haz clic en el botón:</p>
+        <p style="text-align:center;margin:28px 0;">
+          <a href="${changePasswordUrl}" style="background:#1e3a8a;color:white!important;padding:14px 28px;text-decoration:none;border-radius:8px;display:inline-block;font-weight:600;font-size:18px;">Cambiar contraseña</a>
         </p>
-        <p style="color:#64748b;font-size:14px;">Si no solicitaste este cambio, ignora este correo.</p>
+        <p style="color:#64748b;font-size:16px;margin:24px 0 0;">Si no solicitaste este cambio, ignora este correo.</p>
       `,
+      hasLogo,
     );
-    return this.send(to, subject, text, html);
+    return this.send(to, subject, text, html, this.getLogoAttachments());
   }
 }

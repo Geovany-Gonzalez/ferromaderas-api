@@ -221,10 +221,14 @@ export class UsersService {
     return { ok: true };
   }
 
-  async updatePassword(id: string, passwordHash: string) {
+  async updatePassword(id: string, passwordHash: string, mustChangePassword?: boolean) {
+    const data: { passwordHash: string; mustChangePassword?: boolean } = { passwordHash };
+    if (mustChangePassword !== undefined) {
+      data.mustChangePassword = mustChangePassword;
+    }
     await this.prisma.user.update({
       where: { id },
-      data: { passwordHash },
+      data,
     });
   }
 
