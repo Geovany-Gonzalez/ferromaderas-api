@@ -5,6 +5,13 @@ import { PrismaService } from '../../core/database/prisma.service';
 import { MailService } from '../mail/mail.service';
 import * as bcrypt from 'bcrypt';
 
+/** Normaliza teléfono: solo dígitos. El +502 se agrega en el frontend al mostrar. */
+function normalizePhone(phone: string | undefined): string | null {
+  if (!phone?.trim()) return null;
+  const digits = phone.replace(/\D/g, '');
+  return digits || null;
+}
+
 const userInclude = {
   role: {
     include: {
@@ -91,10 +98,9 @@ export class UsersService {
       username: u.username,
       name: u.name,
       email: u.email,
+      phone: u.phone,
       rol: u.role.slug,
-      ultimoAcceso: u.lastLoginAt
-        ? u.lastLoginAt.toISOString().split('T')[0]
-        : null,
+      ultimoAcceso: u.lastLoginAt ? u.lastLoginAt.toISOString() : null,
       estado: u.status,
     }));
   }
@@ -134,7 +140,7 @@ export class UsersService {
         email,
         passwordHash,
         name: data.name.trim(),
-        phone: data.phone?.trim() || null,
+        phone: normalizePhone(data.phone),
         roleId: role.id,
         status: data.status ?? 'activo',
         mustChangePassword: true,
@@ -187,7 +193,7 @@ export class UsersService {
       }
       update.email = email;
     }
-    if (data.phone !== undefined) update.phone = data.phone?.trim() || null;
+    if (data.phone !== undefined) update.phone = normalizePhone(data.phone);
     if (data.status !== undefined) update.status = data.status;
     if (data.roleSlug) {
       const role = await this.prisma.role.findUnique({

@@ -70,7 +70,12 @@ export class AuthService {
     );
     const frontendUrl = this.config.get<string>('FRONTEND_URL') ?? 'http://localhost:4200';
     const changePasswordUrl = `${frontendUrl}/cambiar-password?token=${encodeURIComponent(token)}`;
-    // Envío en segundo plano para no bloquear la respuesta (evita que se cuelgue)
+
+    if (!this.mail.isConfigured()) {
+      return { message: msg };
+    }
+
+    // Envío en segundo plano para no bloquear la respuesta
     this.mail
       .sendPasswordReset(user.email, user.username, tempPassword, changePasswordUrl)
       .catch((err) => console.error('[AuthService] Error enviando email de recuperación:', err));

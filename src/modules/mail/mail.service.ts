@@ -29,7 +29,15 @@ export class MailService {
           rejectUnauthorized: this.config.get<string>('NODE_ENV') === 'production',
         },
       });
+      console.log('[MailService] SMTP configurado:', host, 'puerto', port ?? 587);
+    } else {
+      console.warn('[MailService] SMTP NO configurado. Variables requeridas: SMTP_HOST, SMTP_USER, SMTP_PASS');
     }
+  }
+
+  /** Indica si el envío de correos está disponible */
+  isConfigured(): boolean {
+    return this.transporter !== null;
   }
 
   private get from(): string {
@@ -117,7 +125,7 @@ export class MailService {
     attachments?: nodemailer.SendMailOptions['attachments'],
   ): Promise<boolean> {
     if (!this.transporter) {
-      console.warn('[MailService] SMTP no configurado. Email no enviado:', { to, subject });
+      console.warn('[MailService] SMTP no configurado. Email NO enviado:', { to, subject });
       return true; // No fallar en desarrollo
     }
     try {
@@ -131,7 +139,7 @@ export class MailService {
       });
       return true;
     } catch (err) {
-      console.error('[MailService] Error enviando email:', err);
+      console.error('[MailService] Error enviando email a', to, ':', err);
       throw err;
     }
   }

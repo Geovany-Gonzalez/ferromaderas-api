@@ -101,3 +101,28 @@ model Product {
 
   @@map("productos")
 }
+
+// ---------------------------------------------------------------------------
+// Políticas de compra (página pública)
+// ---------------------------------------------------------------------------
+model PolicyPage {
+  id       String   @id @default(uuid())
+  title    String   @map("titulo")
+  subtitle String   @map("subtitulo")
+  sections PolicySection[]
+
+  @@map("politica_pagina")
+}
+
+model PolicySection {
+  id       String   @id @default(uuid())
+  title   String   @map("titulo")
+  content Json     @map("contenido") // array de strings
+  iconUrl String?  @map("icono_url")
+  order   Int      @default(0) @map("orden")
+
+  pageId String     @map("pagina_id")
+  page   PolicyPage @relation(fields: [pageId], references: [id], onDelete: Cascade)
+
+  @@map("politica_seccion")
+}
