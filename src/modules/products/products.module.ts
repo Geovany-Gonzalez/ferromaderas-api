@@ -1,12 +1,10 @@
 import { Module } from '@nestjs/common';
+import { ProductsController } from './products.controller';
+import { ProductsService } from './products.service';
 
-/**
- * Módulo de productos (futuro).
- * Placeholder para mantener estructura ordenada.
- */
 @Module({
-  controllers: [],
-  providers: [],
-  exports: [],
+  controllers: [ProductsController],
+  providers: [ProductsService],
+  exports: [ProductsService],
 })
 export class ProductsModule {}

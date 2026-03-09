@@ -89,13 +89,18 @@ model Category {
 // Productos
 // ---------------------------------------------------------------------------
 model Product {
-  id          String   @id @default(uuid())
-  name        String
-  description String?
-  price       Decimal  @db.Decimal(10, 2)
-  categoryId  String?  @map("categoria_id")
-  createdAt   DateTime @default(now()) @map("creado_en")
-  updatedAt   DateTime @updatedAt @map("actualizado_en")
+  id            String   @id @default(uuid())
+  code          String   @unique @map("codigo")
+  name          String
+  price         Decimal  @db.Decimal(10, 2)
+  imageUrl      String?  @map("imagen_url")
+  categoryId    String?  @map("categoria_id")
+  active        Boolean  @default(true) @map("activo")
+  featured      Boolean  @default(false) @map("destacado")
+  pendingConfig Boolean  @default(false) @map("pendiente_config")
+  stock         Int      @default(0) @map("existencia")
+  createdAt     DateTime @default(now()) @map("creado_en")
+  updatedAt     DateTime @updatedAt @map("actualizado_en")
 
   category Category? @relation(fields: [categoryId], references: [id])
 
