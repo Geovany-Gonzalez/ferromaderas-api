@@ -11,7 +11,6 @@ import {
 } from '@nestjs/common';
 import {
   ProductsService,
-  ProductDto,
   CreateProductDto,
   BulkImportItemDto,
   BulkImportResultDto,
@@ -19,6 +18,7 @@ import {
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/permissions.guard';
 import { RequirePermissions } from '../auth/permissions.decorator';
+import { ApiKeyGuard } from '../auth/api-key.guard';
 
 @Controller('products')
 export class ProductsController {
@@ -73,6 +73,22 @@ export class ProductsController {
   @UseGuards(JwtAuthGuard, PermissionsGuard)
   @RequirePermissions('manage_products')
   bulkImport(
+    @Body()
+    body: {
+      items: BulkImportItemDto[];
+      sync?: boolean;
+    }
+  ): Promise<BulkImportResultDto> {
+    return this.products.bulkImport(body.items ?? [], body.sync ?? false);
+  }
+
+  /**
+   * Sincronización automática desde el .exe local (sin JWT).
+   * Requiere header X-API-Key con INVENTORY_SYNC_API_KEY.
+   */
+  @Post('bulk-sync')
+  @UseGuards(ApiKeyGuard)
+  bulkSync(
     @Body()
     body: {
       items: BulkImportItemDto[];

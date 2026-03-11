@@ -66,7 +66,7 @@ export class AuthService {
     await this.users.updatePassword(user.id, hash, true);
     const token = this.jwt.sign(
       { sub: user.id, purpose: 'force-password-change' },
-      { expiresIn: '7d' },
+      { expiresIn: '1d' },
     );
     const frontendUrl = this.config.get<string>('FRONTEND_URL') ?? 'http://localhost:4200';
     const changePasswordUrl = `${frontendUrl}/cambiar-password?token=${encodeURIComponent(token)}`;

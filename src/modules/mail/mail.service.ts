@@ -178,7 +178,7 @@ export class MailService {
     changePasswordUrl: string,
   ): Promise<boolean> {
     const subject = 'Recuperación de contraseña - Ferromaderas Admin';
-    const text = `Hola ${username},\n\nSe ha generado una contraseña temporal para tu cuenta.\n\nContraseña temporal: ${tempPassword}\n\nDebes cambiarla antes de iniciar sesión. Haz clic en el enlace:\n${changePasswordUrl}\n\n— Ferromaderas`;
+    const text = `Hola ${username},\n\nSe ha generado una contraseña temporal para tu cuenta.\n\nContraseña temporal: ${tempPassword}\n\nDebes cambiarla antes de iniciar sesión. Haz clic en el enlace:\n${changePasswordUrl}\n\nEste enlace es válido por 24 horas.\n\n— Ferromaderas`;
     const hasLogo = !!this.logoPath;
     const html = this.emailTemplate(
       `<p style="font-size:20px;margin:0 0 16px;">Hola <strong>${username}</strong>,</p>`,
@@ -189,6 +189,7 @@ export class MailService {
         <p style="text-align:center;margin:28px 0;">
           <a href="${changePasswordUrl}" style="background:#1e3a8a;color:white!important;padding:14px 28px;text-decoration:none;border-radius:8px;display:inline-block;font-weight:600;font-size:18px;">Cambiar contraseña</a>
         </p>
+        <p style="color:#64748b;font-size:16px;margin:16px 0 0;"><strong>Importante:</strong> Este enlace es válido por 24 horas. Si expira, solicita uno nuevo.</p>
         <p style="color:#64748b;font-size:16px;margin:24px 0 0;">Si no solicitaste este cambio, ignora este correo.</p>
       `,
       hasLogo,

@@ -15,7 +15,7 @@ import { UsersModule } from '../users/users.module';
       imports: [ConfigModule],
       useFactory: (config: ConfigService) => ({
         secret: config.get<string>('JWT_SECRET') ?? 'ferromaderas-secret-change-in-prod',
-        signOptions: { expiresIn: '8h' },
+        signOptions: { expiresIn: '11h' },
       }),
       inject: [ConfigService],
     }),
