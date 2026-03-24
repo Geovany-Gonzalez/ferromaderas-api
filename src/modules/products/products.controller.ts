@@ -8,7 +8,9 @@ import {
   Param,
   Query,
   UseGuards,
+  Req,
 } from '@nestjs/common';
+import { Request } from 'express';
 import {
   ProductsService,
   CreateProductDto,
@@ -19,6 +21,8 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/permissions.guard';
 import { RequirePermissions } from '../auth/permissions.decorator';
 import { ApiKeyGuard } from '../auth/api-key.guard';
+import { CurrentUser } from '../auth/current-user.decorator';
+import type { UserPayload } from '../auth/auth.types';
 
 @Controller('products')
 export class ProductsController {
@@ -72,14 +76,21 @@ export class ProductsController {
   @Post('bulk')
   @UseGuards(JwtAuthGuard, PermissionsGuard)
   @RequirePermissions('manage_products')
-  bulkImport(
+  async bulkImport(
     @Body()
     body: {
       items: BulkImportItemDto[];
       sync?: boolean;
-    }
+    },
+    @CurrentUser() user: UserPayload,
+    @Req() req: Request,
   ): Promise<BulkImportResultDto> {
-    return this.products.bulkImport(body.items ?? [], body.sync ?? false);
+    const result = await this.products.bulkImport(body.items ?? [], body.sync ?? false, {
+      usuarioId: user?.sub,
+      ip: req.ip ?? req.socket?.remoteAddress,
+      origen: 'admin',
+    });
+    return result;
   }
 
   /**
@@ -88,13 +99,18 @@ export class ProductsController {
    */
   @Post('bulk-sync')
   @UseGuards(ApiKeyGuard)
-  bulkSync(
+  async bulkSync(
     @Body()
     body: {
       items: BulkImportItemDto[];
       sync?: boolean;
-    }
+    },
+    @Req() req: Request,
   ): Promise<BulkImportResultDto> {
-    return this.products.bulkImport(body.items ?? [], body.sync ?? false);
+    const result = await this.products.bulkImport(body.items ?? [], body.sync ?? false, {
+      ip: req.ip ?? req.socket?.remoteAddress,
+      origen: 'sincronizacion_automatica',
+    });
+    return result;
   }
 }

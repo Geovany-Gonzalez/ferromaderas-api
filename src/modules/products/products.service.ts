@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../core/database/prisma.service';
+import { BitacoraService } from '../bitacora/bitacora.service';
 import { Decimal } from '@prisma/client/runtime/library';
 
 export interface ProductDto {
@@ -40,9 +41,18 @@ export interface BulkImportResultDto {
   errors: string[];
 }
 
+export interface BulkImportMeta {
+  usuarioId?: string;
+  ip?: string;
+  origen: 'admin' | 'sincronizacion_automatica';
+}
+
 @Injectable()
 export class ProductsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly bitacora: BitacoraService,
+  ) {}
 
   private toDto(p: {
     id: string;
@@ -144,7 +154,8 @@ export class ProductsService {
 
   async bulkImport(
     items: BulkImportItemDto[],
-    sync = false
+    sync = false,
+    meta?: BulkImportMeta,
   ): Promise<BulkImportResultDto> {
     const errors: string[] = [];
     let created = 0;
@@ -221,6 +232,21 @@ export class ProductsService {
         }
       }
     }
+
+    await this.bitacora.registrar({
+      modulo: 'inventario_sync',
+      accion: 'carga_masiva',
+      usuarioId: meta?.usuarioId,
+      ip: meta?.ip,
+      detalles: {
+        origen: meta?.origen ?? 'admin',
+        creados: created,
+        actualizados: updated,
+        desactivados: deleted,
+        totalItems: items.length,
+        errores: errors.length,
+      },
+    });
 
     return {
       created,

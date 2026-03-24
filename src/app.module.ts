@@ -8,6 +8,7 @@ import { UsersModule } from './modules/users/users.module';
 import { PoliciesModule } from './modules/policies/policies.module';
 import { ProductsModule } from './modules/products/products.module';
 import { CategoriesModule } from './modules/categories/categories.module';
+import { BitacoraModule } from './modules/bitacora/bitacora.module';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { CategoriesModule } from './modules/categories/categories.module';
     PoliciesModule,
     ProductsModule,
     CategoriesModule,
+    BitacoraModule,
   ],
 })
 export class AppModule {}

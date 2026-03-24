@@ -131,3 +131,18 @@ model PolicySection {
 
   @@map("politica_seccion")
 }
+
+// ---------------------------------------------------------------------------
+// Bitácora (auditoría para todo el sistema)
+// ---------------------------------------------------------------------------
+model Bitacora {
+  id        String   @id @default(uuid())
+  fecha     DateTime @default(now()) @map("fecha")
+  modulo    String   @map("modulo")   // productos, usuarios, auth, inventario_sync, etc.
+  accion    String   @map("accion")   // crear, actualizar, eliminar, sincronizar, login, etc.
+  usuarioId String?  @map("usuario_id")
+  detalles  Json?    @map("detalles") // JSON con datos adicionales
+  ip        String?  @map("ip")
+
+  @@map("bitacora")
+}
