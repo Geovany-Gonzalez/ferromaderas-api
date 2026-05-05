@@ -71,12 +71,15 @@ model User {
 // Categorías
 // ---------------------------------------------------------------------------
 model Category {
-  id        String   @id @default(uuid())
-  name      String
-  slug      String   @unique
-  parentId  String?  @map("padre_id")
-  createdAt DateTime @default(now()) @map("creado_en")
-  updatedAt DateTime @updatedAt @map("actualizado_en")
+  id          String   @id @default(uuid())
+  name        String
+  slug        String   @unique
+  imageUrl    String?  @map("imagen_url") @db.Text
+  description String?  @map("descripcion") @db.Text
+  active      Boolean  @default(true) @map("activo")
+  parentId    String?  @map("padre_id")
+  createdAt   DateTime @default(now()) @map("creado_en")
+  updatedAt   DateTime @updatedAt @map("actualizado_en")
 
   parent   Category?  @relation("CategoryToCategory", fields: [parentId], references: [id])
   children Category[] @relation("CategoryToCategory")
@@ -88,6 +91,9 @@ model Category {
 // ---------------------------------------------------------------------------
 // Productos
 // ---------------------------------------------------------------------------
+// Regla de negocio en BD (CHECK, migración productos_activo_requiere_catalogo):
+// si activo=true → precio>0, categoría, imagen no vacía, pendiente_config=false.
+// Mantener coherente con ProductsService.canBeActive.
 model Product {
   id            String   @id @default(uuid())
   code          String   @unique @map("codigo")

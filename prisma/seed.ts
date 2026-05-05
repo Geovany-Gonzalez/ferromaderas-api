@@ -9,6 +9,7 @@ async function main() {
     { slug: 'manage_categories', name: 'Gestionar categorías' },
     { slug: 'manage_featured', name: 'Gestionar destacados' },
     { slug: 'view_quotes', name: 'Ver cotizaciones y cambiar estado' },
+    { slug: 'view_bitacora', name: 'Ver bitácora de auditoría' },
     { slug: 'manage_users', name: 'Crear usuarios / Resetear contraseñas' },
     { slug: 'manage_policies', name: 'Gestionar políticas de compra' },
   ];

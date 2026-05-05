@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../../core/database/prisma.service';
 import { BitacoraService } from '../bitacora/bitacora.service';
 import { Decimal } from '@prisma/client/runtime/library';
@@ -45,6 +45,12 @@ export interface BulkImportMeta {
   usuarioId?: string;
   ip?: string;
   origen: 'admin' | 'sincronizacion_automatica';
+}
+
+/** Usuario e IP para auditoría (panel admin). */
+export interface ProductAuditMeta {
+  usuarioId?: string;
+  ip?: string;
 }
 
 @Injectable()
@@ -101,29 +107,131 @@ export class ProductsService {
     return p ? this.toDto(p) : null;
   }
 
-  async create(dto: CreateProductDto): Promise<ProductDto> {
+  private async registrarAuditoriaProducto(
+    accion: string,
+    detalles: Record<string, unknown>,
+    meta?: ProductAuditMeta
+  ): Promise<void> {
+    await this.bitacora.registrar({
+      modulo: 'productos',
+      accion,
+      usuarioId: meta?.usuarioId,
+      ip: meta?.ip,
+      detalles,
+    });
+  }
+
+  async create(
+    dto: CreateProductDto,
+    meta?: ProductAuditMeta
+  ): Promise<ProductDto> {
+    const merged: ProductDto = {
+      id: '',
+      code: dto.code.trim(),
+      name: dto.name.trim(),
+      price: dto.price,
+      imageUrl: dto.imageUrl?.trim() || '',
+      categoryId: dto.categoryId || undefined,
+      active: dto.active ?? true,
+      featured: dto.featured ?? false,
+      pendingConfig: dto.pendingConfig ?? false,
+      stock: dto.stock ?? 0,
+    };
+    if (merged.active && !this.canBeActive(merged)) {
+      throw new BadRequestException(
+        'No se puede crear el producto activo sin precio, categoría e imagen.',
+      );
+    }
+
     const p = await this.prisma.product.create({
       data: {
-        code: dto.code.trim(),
-        name: dto.name.trim(),
-        price: dto.price,
+        code: merged.code,
+        name: merged.name,
+        price: merged.price,
         imageUrl: dto.imageUrl?.trim() || null,
         categoryId: dto.categoryId || null,
-        active: dto.active ?? true,
-        featured: dto.featured ?? false,
-        pendingConfig: dto.pendingConfig ?? false,
-        stock: dto.stock ?? 0,
+        active: merged.active,
+        featured: merged.featured,
+        pendingConfig: merged.pendingConfig,
+        stock: merged.stock,
       },
     });
-    return this.toDto(p);
+    const out = this.toDto(p);
+    await this.registrarAuditoriaProducto(
+      'crear',
+      {
+        productoId: p.id,
+        codigo: p.code,
+        nombre: p.name,
+        activo: p.active,
+      },
+      meta
+    );
+    return out;
+  }
+
+  /**
+   * Producto apto para estar activo en catálogo (no pendiente y con datos mínimos).
+   * Debe mantenerse alineado con la restricción CHECK en BD (migración productos_activo_requiere_catalogo).
+   */
+  private canBeActive(p: ProductDto): boolean {
+    if (p.pendingConfig) return false;
+    if (p.price <= 0) return false;
+    if (!p.categoryId?.trim()) return false;
+    if (!p.imageUrl?.trim()) return false;
+    return true;
+  }
+
+  private mergeForValidation(
+    existing: {
+      id: string;
+      code: string;
+      name: string;
+      price: Decimal;
+      imageUrl: string | null;
+      categoryId: string | null;
+      active: boolean;
+      featured: boolean;
+      pendingConfig: boolean;
+      stock: number;
+    },
+    dto: Partial<CreateProductDto>
+  ): ProductDto {
+    const base = this.toDto(existing);
+    return {
+      ...base,
+      ...(dto.code !== undefined && { code: dto.code.trim() }),
+      ...(dto.name !== undefined && { name: dto.name.trim() }),
+      ...(dto.price !== undefined && { price: dto.price }),
+      ...(dto.imageUrl !== undefined && {
+        imageUrl: dto.imageUrl?.trim() || undefined,
+      }),
+      ...(dto.categoryId !== undefined && {
+        categoryId: dto.categoryId || undefined,
+      }),
+      ...(dto.active !== undefined && { active: dto.active }),
+      ...(dto.featured !== undefined && { featured: dto.featured }),
+      ...(dto.pendingConfig !== undefined && {
+        pendingConfig: dto.pendingConfig,
+      }),
+      ...(dto.stock !== undefined && { stock: dto.stock }),
+    };
   }
 
   async update(
     id: string,
-    dto: Partial<CreateProductDto>
+    dto: Partial<CreateProductDto>,
+    meta?: ProductAuditMeta
   ): Promise<ProductDto | null> {
     const existing = await this.prisma.product.findUnique({ where: { id } });
     if (!existing) return null;
+
+    const merged = this.mergeForValidation(existing, dto);
+    if (merged.active && !this.canBeActive(merged)) {
+      throw new BadRequestException(
+        'No se puede activar el producto sin precio, categoría e imagen. Completa la configuración primero.',
+      );
+    }
 
     const p = await this.prisma.product.update({
       where: { id },
@@ -145,11 +253,34 @@ export class ProductsService {
         ...(dto.stock !== undefined && { stock: dto.stock }),
       },
     });
-    return this.toDto(p);
+    const out = this.toDto(p);
+
+    const keys = Object.keys(dto).filter(
+      (k) => dto[k as keyof CreateProductDto] !== undefined
+    );
+    let accion = 'actualizar';
+    if (keys.length === 1 && keys[0] === 'active') {
+      accion = dto.active ? 'activar' : 'desactivar';
+    }
+    const detalles: Record<string, unknown> = {
+      productoId: p.id,
+      codigo: p.code,
+      campos: keys.filter((k) => k !== 'imageUrl'),
+    };
+    if (dto.imageUrl !== undefined) {
+      detalles.imagenActualizada = true;
+    }
+    await this.registrarAuditoriaProducto(accion, detalles, meta);
+
+    return out;
   }
 
-  async setActive(id: string, active: boolean): Promise<ProductDto | null> {
-    return this.update(id, { active });
+  async setActive(
+    id: string,
+    active: boolean,
+    meta?: ProductAuditMeta
+  ): Promise<ProductDto | null> {
+    return this.update(id, { active }, meta);
   }
 
   async bulkImport(

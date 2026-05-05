@@ -36,7 +36,16 @@ export class CategoriesController {
   @Post()
   @UseGuards(JwtAuthGuard, PermissionsGuard)
   @RequirePermissions('manage_categories')
-  create(@Body() body: { name: string; slug: string }) {
+  create(
+    @Body()
+    body: {
+      name: string;
+      slug: string;
+      imageUrl?: string;
+      description?: string;
+      active?: boolean;
+    }
+  ) {
     return this.categories.create(body);
   }
 
@@ -45,7 +54,14 @@ export class CategoriesController {
   @RequirePermissions('manage_categories')
   update(
     @Param('id') id: string,
-    @Body() body: { name?: string; slug?: string }
+    @Body()
+    body: {
+      name?: string;
+      slug?: string;
+      imageUrl?: string | null;
+      description?: string | null;
+      active?: boolean;
+    }
   ) {
     return this.categories.update(id, body);
   }

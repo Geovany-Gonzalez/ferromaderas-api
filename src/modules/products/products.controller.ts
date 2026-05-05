@@ -52,15 +52,30 @@ export class ProductsController {
   @Post()
   @UseGuards(JwtAuthGuard, PermissionsGuard)
   @RequirePermissions('manage_products')
-  create(@Body() body: CreateProductDto) {
-    return this.products.create(body);
+  create(
+    @Body() body: CreateProductDto,
+    @CurrentUser() user: UserPayload,
+    @Req() req: Request
+  ) {
+    return this.products.create(body, {
+      usuarioId: user?.sub,
+      ip: req.ip ?? req.socket?.remoteAddress,
+    });
   }
 
   @Put(':id')
   @UseGuards(JwtAuthGuard, PermissionsGuard)
   @RequirePermissions('manage_products')
-  update(@Param('id') id: string, @Body() body: Partial<CreateProductDto>) {
-    return this.products.update(id, body);
+  update(
+    @Param('id') id: string,
+    @Body() body: Partial<CreateProductDto>,
+    @CurrentUser() user: UserPayload,
+    @Req() req: Request
+  ) {
+    return this.products.update(id, body, {
+      usuarioId: user?.sub,
+      ip: req.ip ?? req.socket?.remoteAddress,
+    });
   }
 
   @Patch(':id/active')
@@ -68,9 +83,14 @@ export class ProductsController {
   @RequirePermissions('manage_products')
   setActive(
     @Param('id') id: string,
-    @Body() body: { active: boolean }
+    @Body() body: { active: boolean },
+    @CurrentUser() user: UserPayload,
+    @Req() req: Request
   ) {
-    return this.products.setActive(id, body.active);
+    return this.products.setActive(id, body.active, {
+      usuarioId: user?.sub,
+      ip: req.ip ?? req.socket?.remoteAddress,
+    });
   }
 
   @Post('bulk')
