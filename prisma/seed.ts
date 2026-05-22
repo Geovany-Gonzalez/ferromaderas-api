@@ -130,11 +130,9 @@ async function main() {
         },
       });
     }
-    console.log('Políticas de compra creadas.');
   }
 
-  console.log('Seed completado: roles, permisos, usuario admin y políticas.');
-  console.log('Login: admin@ferromaderas.com / Admin123!');
+  console.log('Seed completado (roles, permisos, usuario admin y políticas).');
 }
 
 main()

@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -8,6 +8,7 @@ const LOGO_CID = 'logo@ferromaderas';
 
 @Injectable()
 export class MailService {
+  private readonly logger = new Logger(MailService.name);
   private transporter: nodemailer.Transporter | null = null;
 
   constructor(private readonly config: ConfigService) {
@@ -29,9 +30,11 @@ export class MailService {
           rejectUnauthorized: this.config.get<string>('NODE_ENV') === 'production',
         },
       });
-      console.log('[MailService] SMTP configurado:', host, 'puerto', port ?? 587);
+      this.logger.log('SMTP transport inicializado');
     } else {
-      console.warn('[MailService] SMTP NO configurado. Variables requeridas: SMTP_HOST, SMTP_USER, SMTP_PASS');
+      this.logger.warn(
+        'SMTP no configurado; no se enviarán correos hasta definir SMTP_HOST, SMTP_USER y SMTP_PASS',
+      );
     }
   }
 
@@ -125,7 +128,7 @@ export class MailService {
     attachments?: nodemailer.SendMailOptions['attachments'],
   ): Promise<boolean> {
     if (!this.transporter) {
-      console.warn('[MailService] SMTP no configurado. Email NO enviado:', { to, subject });
+      this.logger.debug('Correo omitido: SMTP no configurado');
       return true; // No fallar en desarrollo
     }
     try {
@@ -139,7 +142,9 @@ export class MailService {
       });
       return true;
     } catch (err) {
-      console.error('[MailService] Error enviando email a', to, ':', err);
+      this.logger.error(
+        `Fallo al enviar correo: ${err instanceof Error ? err.message : 'error desconocido'}`,
+      );
       throw err;
     }
   }
@@ -151,7 +156,9 @@ export class MailService {
     changePasswordUrl: string,
   ): Promise<boolean> {
     if (!this.transporter) {
-      console.warn('[MailService] SMTP no configurado. Enlace para cambiar contraseña:', changePasswordUrl);
+      this.logger.warn(
+        'SMTP no configurado: credenciales no enviadas por correo (usa otro canal seguro para el usuario)',
+      );
     }
     const subject = 'Credenciales - Ferromaderas Admin';
     const text = `Hola,\n\nTu usuario ha sido creado en el sistema Ferromaderas.\n\nUsuario: ${username}\nContraseña temporal: ${password}\n\nDebes cambiar tu contraseña antes de poder iniciar sesión. Haz clic en el siguiente enlace:\n${changePasswordUrl}\n\n— Ferromaderas`;

@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../core/database/prisma.service';
 
@@ -37,6 +37,8 @@ export interface BitacoraListQueryDto {
 
 @Injectable()
 export class BitacoraService {
+  private readonly logger = new Logger(BitacoraService.name);
+
   constructor(private readonly prisma: PrismaService) {}
 
   async listar(params: BitacoraListQueryDto): Promise<BitacoraListResultDto> {
@@ -101,8 +103,8 @@ export class BitacoraService {
           ip: entry.ip ?? null,
         },
       });
-    } catch (err) {
-      console.error('[BitacoraService] Error registrando bitácora:', err);
+    } catch {
+      this.logger.warn('No se pudo registrar el evento en la bitácora');
       // No fallar la operación principal si falla el log
     }
   }

@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
@@ -8,6 +8,8 @@ import type { UserPayload } from './auth.types';
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private readonly users: UsersService,
     private readonly jwt: JwtService,
@@ -78,7 +80,11 @@ export class AuthService {
     // Envío en segundo plano para no bloquear la respuesta
     this.mail
       .sendPasswordReset(user.email, user.username, tempPassword, changePasswordUrl)
-      .catch((err) => console.error('[AuthService] Error enviando email de recuperación:', err));
+      .catch((err: unknown) =>
+        this.logger.warn(
+          `Fallo al enviar correo de recuperación: ${err instanceof Error ? err.message : 'error desconocido'}`,
+        ),
+      );
     return { message: msg };
   }
 

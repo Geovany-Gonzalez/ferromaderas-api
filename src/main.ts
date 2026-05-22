@@ -1,11 +1,14 @@
 import { NestFactory } from '@nestjs/core';
-import { ValidationPipe } from '@nestjs/common';
+import { Logger, ValidationPipe } from '@nestjs/common';
 import { json, urlencoded } from 'express';
+import cookieParser from 'cookie-parser';
 import { AppModule } from './app.module';
 import { PrismaService } from './core/database/prisma.service';
 
 async function bootstrap() {
+  const logger = new Logger('Bootstrap');
   const app = await NestFactory.create(AppModule, { bodyParser: false });
+  app.use(cookieParser());
   app.use(json({ limit: '50mb' }));
   app.use(urlencoded({ limit: '50mb', extended: true }));
 
@@ -33,20 +36,22 @@ async function bootstrap() {
   const prisma = app.get(PrismaService);
   try {
     await prisma.$connect();
-  } catch (err) {
-    console.warn(
-      'Database connection failed. API will run but DB features are unavailable.',
+  } catch {
+    logger.warn(
+      'No se pudo conectar a la base de datos; algunas funciones no estarán disponibles.',
     );
   }
 
   const port = process.env.PORT ?? 3001;
   await app.listen(port);
 
-  console.log(`\n🚀 Ferromaderas API running at http://localhost:${port}/api`);
-  console.log(`   Health: http://localhost:${port}/api/health\n`);
+  logger.log(`API Ferromaderas en ejecución (prefijo /api, puerto ${port})`);
 }
 
-bootstrap().catch((err) => {
-  console.error('Failed to start application:', err);
+bootstrap().catch((err: unknown) => {
+  const logger = new Logger('Bootstrap');
+  logger.error(
+    `No se pudo iniciar la aplicación: ${err instanceof Error ? err.message : String(err)}`,
+  );
   process.exit(1);
 });

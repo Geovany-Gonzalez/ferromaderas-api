@@ -1,4 +1,9 @@
-import { Injectable, ConflictException, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  ConflictException,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../../core/database/prisma.service';
@@ -22,6 +27,8 @@ const userInclude = {
 
 @Injectable()
 export class UsersService {
+  private readonly logger = new Logger(UsersService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly mail: MailService,
@@ -156,9 +163,11 @@ export class UsersService {
     try {
       await this.mail.sendCredentials(user.email, user.username, data.password, changePasswordUrl);
     } catch (err) {
-      console.error('[UsersService] Error enviando credenciales por email:', err);
+      this.logger.error(
+        `Fallo al enviar credenciales por correo: ${err instanceof Error ? err.message : 'error desconocido'}`,
+      );
       throw new ConflictException(
-        'Usuario creado pero no se pudo enviar el correo. Verifica la configuración SMTP.',
+        'Usuario creado pero no se pudo enviar el correo. Intenta de nuevo más tarde.',
       );
     }
     return {
