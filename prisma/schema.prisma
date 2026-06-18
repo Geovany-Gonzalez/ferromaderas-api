@@ -152,3 +152,57 @@ model Bitacora {
 
   @@map("bitacora")
 }
+
+// ---------------------------------------------------------------------------
+// Chatbot (asistente del sitio público)
+// ---------------------------------------------------------------------------
+// Preguntas prelistadas/respuestas controladas que se editan desde el panel.
+// Se usan tanto para los botones del chat como para responder SIN costo de IA
+// cuando el mensaje del usuario coincide con una FAQ.
+model ChatFaq {
+  id        String   @id @default(uuid())
+  question  String   @map("pregunta")
+  answer    String   @map("respuesta") @db.Text
+  // Palabras clave separadas por coma para el emparejamiento del texto libre.
+  keywords  String?  @map("palabras_clave") @db.Text
+  order     Int      @default(0) @map("orden")
+  active    Boolean  @default(true) @map("activo")
+  createdAt DateTime @default(now()) @map("creado_en")
+  updatedAt DateTime @updatedAt @map("actualizado_en")
+
+  @@map("chatbot_faq")
+}
+
+// Una conversación agrupa los mensajes de una sesión del navegador.
+model ChatConversation {
+  id          String   @id @default(uuid())
+  sessionId   String   @map("session_id")
+  // Nombre que el visitante ingresa (opcional) para personalizar el trato.
+  visitorName String?  @map("visitante_nombre")
+  startedAt   DateTime @default(now()) @map("iniciada_en")
+  lastAt      DateTime @updatedAt @map("ultima_en")
+  ip          String?  @map("ip")
+  userAgent   String?  @map("user_agent") @db.Text
+
+  messages ChatMessage[]
+
+  @@index([sessionId])
+  @@map("chatbot_conversacion")
+}
+
+// Cada mensaje del historial. Guardamos tokens de IA para medir el consumo/costo.
+model ChatMessage {
+  id               String   @id @default(uuid())
+  conversationId   String   @map("conversacion_id")
+  role             String   @map("rol")        // 'user' | 'assistant'
+  content          String   @map("contenido") @db.Text
+  source           String?  @map("fuente")     // 'faq' | 'ia' | 'fallback'
+  promptTokens     Int      @default(0) @map("tokens_entrada")
+  completionTokens Int      @default(0) @map("tokens_salida")
+  createdAt        DateTime @default(now()) @map("creado_en")
+
+  conversation ChatConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId])
+  @@map("chatbot_mensaje")
+}

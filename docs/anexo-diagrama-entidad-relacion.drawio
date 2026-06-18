@@ -1,0 +1,85 @@
+<mxfile host="app.diagrams.net" agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36" version="29.6.4">
+  <diagram name="DER - Ferromaderas" id="ferromaderas-erd">
+    <mxGraphModel dx="1584" dy="863" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1500" pageHeight="980" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF3E0;strokeColor=#E65100;fontSize=18;fontStyle=1;align=center;verticalAlign=middle;" value="Diagrama Entidad-Relación&lt;br&gt;&lt;b&gt;Plataforma web responsive para consulta de productos, información comercial y cotización en línea&lt;/b&gt;&lt;br&gt;Ferromaderas, Amatitlán" vertex="1">
+          <mxGeometry height="105" width="1120" x="205" y="10" as="geometry" />
+        </mxCell>
+        <mxCell id="roles" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F5E9;strokeColor=#2E7D32;fontSize=12;align=left;spacingLeft=10;verticalAlign=top;" value="&lt;b&gt;ROLES&lt;/b&gt;&lt;br&gt;&lt;hr&gt;&lt;b&gt;PK&lt;/b&gt; id&lt;br&gt;slug&lt;br&gt;nombre&lt;br&gt;creado_en" vertex="1">
+          <mxGeometry height="125" width="190" x="70" y="150" as="geometry" />
+        </mxCell>
+        <mxCell id="rol_permisos" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F5E9;strokeColor=#2E7D32;fontSize=12;align=left;spacingLeft=10;verticalAlign=top;" value="&lt;b&gt;ROL_PERMISOS&lt;/b&gt;&lt;br&gt;&lt;hr&gt;&lt;b&gt;PK/FK&lt;/b&gt; rol_id&lt;br&gt;&lt;b&gt;PK/FK&lt;/b&gt; permiso_id" vertex="1">
+          <mxGeometry height="105" width="205" x="470" y="150" as="geometry" />
+        </mxCell>
+        <mxCell id="permisos" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F5E9;strokeColor=#2E7D32;fontSize=12;align=left;spacingLeft=10;verticalAlign=top;" value="&lt;b&gt;PERMISOS&lt;/b&gt;&lt;br&gt;&lt;hr&gt;&lt;b&gt;PK&lt;/b&gt; id&lt;br&gt;slug&lt;br&gt;nombre" vertex="1">
+          <mxGeometry height="105" width="190" x="750" y="150" as="geometry" />
+        </mxCell>
+        <mxCell id="bitacora" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ECEFF1;strokeColor=#455A64;fontSize=12;align=left;spacingLeft=10;verticalAlign=top;" value="&lt;b&gt;BITACORA&lt;/b&gt;&lt;br&gt;&lt;hr&gt;&lt;b&gt;PK&lt;/b&gt; id&lt;br&gt;&lt;b&gt;FK&lt;/b&gt; usuario_id&lt;br&gt;fecha&lt;br&gt;modulo&lt;br&gt;accion&lt;br&gt;detalles&lt;br&gt;ip" vertex="1">
+          <mxGeometry height="175" width="210" x="70" y="340" as="geometry" />
+        </mxCell>
+        <mxCell id="usuarios" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E3F2FD;strokeColor=#1565C0;fontSize=12;align=left;spacingLeft=10;verticalAlign=top;" value="&lt;b&gt;USUARIOS&lt;/b&gt;&lt;br&gt;&lt;hr&gt;&lt;b&gt;PK&lt;/b&gt; id&lt;br&gt;&lt;b&gt;FK&lt;/b&gt; rol_id&lt;br&gt;email&lt;br&gt;username&lt;br&gt;password_hash&lt;br&gt;nombre&lt;br&gt;telefono&lt;br&gt;estado&lt;br&gt;ultimo_login" vertex="1">
+          <mxGeometry height="205" width="220" x="330" y="330" as="geometry" />
+        </mxCell>
+        <mxCell id="clientes" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E0F7FA;strokeColor=#00838F;fontSize=12;align=left;spacingLeft=10;verticalAlign=top;" value="&lt;b&gt;CLIENTES&lt;/b&gt;&lt;br&gt;&lt;hr&gt;&lt;b&gt;PK&lt;/b&gt; id&lt;br&gt;email&lt;br&gt;password_hash&lt;br&gt;nombre&lt;br&gt;telefono&lt;br&gt;direccion&lt;br&gt;estado&lt;br&gt;ultimo_login" vertex="1">
+          <mxGeometry height="200" width="220" x="1040" y="150" as="geometry" />
+        </mxCell>
+        <mxCell id="cotizaciones" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FCE4EC;strokeColor=#AD1457;fontSize=12;align=left;spacingLeft=10;verticalAlign=top;" value="&lt;b&gt;COTIZACIONES&lt;/b&gt;&lt;br&gt;&lt;hr&gt;&lt;b&gt;PK&lt;/b&gt; id&lt;br&gt;&lt;b&gt;FK&lt;/b&gt; cliente_id&lt;br&gt;&lt;b&gt;FK&lt;/b&gt; vendedor_id&lt;br&gt;fecha_hora&lt;br&gt;estado&lt;br&gt;total&lt;br&gt;canal_origen&lt;br&gt;direccion_entrega&lt;br&gt;observaciones" vertex="1">
+          <mxGeometry height="235" width="230" x="650" y="330" as="geometry" />
+        </mxCell>
+        <mxCell id="seguimiento" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FCE4EC;strokeColor=#AD1457;fontSize=12;align=left;spacingLeft=10;verticalAlign=top;" value="&lt;b&gt;SEGUIMIENTO_COTIZACION&lt;/b&gt;&lt;br&gt;&lt;hr&gt;&lt;b&gt;PK&lt;/b&gt; id&lt;br&gt;&lt;b&gt;FK&lt;/b&gt; cotizacion_id&lt;br&gt;&lt;b&gt;FK&lt;/b&gt; usuario_id&lt;br&gt;estado_anterior&lt;br&gt;estado_nuevo&lt;br&gt;comentario&lt;br&gt;fecha" vertex="1">
+          <mxGeometry height="190" width="245" x="970" y="385" as="geometry" />
+        </mxCell>
+        <mxCell id="categorias" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF8E1;strokeColor=#F9A825;fontSize=12;align=left;spacingLeft=10;verticalAlign=top;" value="&lt;b&gt;CATEGORIAS&lt;/b&gt;&lt;br&gt;&lt;hr&gt;&lt;b&gt;PK&lt;/b&gt; id&lt;br&gt;&lt;b&gt;FK&lt;/b&gt; padre_id&lt;br&gt;nombre&lt;br&gt;slug&lt;br&gt;descripcion&lt;br&gt;imagen_url&lt;br&gt;activo" vertex="1">
+          <mxGeometry height="175" width="210" x="70" y="640" as="geometry" />
+        </mxCell>
+        <mxCell id="productos" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF8E1;strokeColor=#F9A825;fontSize=12;align=left;spacingLeft=10;verticalAlign=top;" value="&lt;b&gt;PRODUCTOS&lt;/b&gt;&lt;br&gt;&lt;hr&gt;&lt;b&gt;PK&lt;/b&gt; id&lt;br&gt;&lt;b&gt;FK&lt;/b&gt; categoria_id&lt;br&gt;codigo&lt;br&gt;nombre&lt;br&gt;precio&lt;br&gt;existencia&lt;br&gt;imagen_url&lt;br&gt;activo&lt;br&gt;destacado" vertex="1">
+          <mxGeometry height="220" width="220" x="330" y="620" as="geometry" />
+        </mxCell>
+        <mxCell id="cotizacion_detalle" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FCE4EC;strokeColor=#AD1457;fontSize=12;align=left;spacingLeft=10;verticalAlign=top;" value="&lt;b&gt;COTIZACION_DETALLE&lt;/b&gt;&lt;br&gt;&lt;hr&gt;&lt;b&gt;PK&lt;/b&gt; id&lt;br&gt;&lt;b&gt;FK&lt;/b&gt; cotizacion_id&lt;br&gt;&lt;b&gt;FK&lt;/b&gt; producto_id&lt;br&gt;cantidad&lt;br&gt;precio_unitario&lt;br&gt;subtotal" vertex="1">
+          <mxGeometry height="175" width="230" x="650" y="640" as="geometry" />
+        </mxCell>
+        <mxCell id="pagina" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F3E5F5;strokeColor=#6A1B9A;fontSize=12;align=left;spacingLeft=10;verticalAlign=top;" value="&lt;b&gt;PAGINA_COMERCIAL&lt;/b&gt;&lt;br&gt;&lt;hr&gt;&lt;b&gt;PK&lt;/b&gt; id&lt;br&gt;titulo&lt;br&gt;subtitulo&lt;br&gt;tipo&lt;br&gt;activo" vertex="1">
+          <mxGeometry height="135" width="210" x="970" y="665" as="geometry" />
+        </mxCell>
+        <mxCell id="seccion" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F3E5F5;strokeColor=#6A1B9A;fontSize=12;align=left;spacingLeft=10;verticalAlign=top;" value="&lt;b&gt;SECCION_COMERCIAL&lt;/b&gt;&lt;br&gt;&lt;hr&gt;&lt;b&gt;PK&lt;/b&gt; id&lt;br&gt;&lt;b&gt;FK&lt;/b&gt; pagina_id&lt;br&gt;titulo&lt;br&gt;contenido&lt;br&gt;icono_url&lt;br&gt;orden" vertex="1">
+          <mxGeometry height="165" width="230" x="1235" y="650" as="geometry" />
+        </mxCell>
+        <mxCell id="e_roles_rp" edge="1" parent="1" source="roles" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;strokeColor=#2E7D32;fontSize=11;fontStyle=1;" target="rol_permisos" value="1:N">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_rp_permisos" edge="1" parent="1" source="rol_permisos" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;strokeColor=#2E7D32;fontSize=11;fontStyle=1;" target="permisos" value="N:1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_roles_usuarios" edge="1" parent="1" source="roles" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;strokeColor=#1565C0;fontSize=11;fontStyle=1;" target="usuarios" value="1:N">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_usuarios_bitacora" edge="1" parent="1" source="usuarios" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;dashed=1;strokeColor=#455A64;fontSize=11;fontStyle=1;" target="bitacora" value="1:N">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_clientes_cotizaciones" edge="1" parent="1" source="clientes" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;strokeColor=#00838F;fontSize=11;fontStyle=1;" target="cotizaciones" value="1:N">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_usuarios_cotizaciones" edge="1" parent="1" source="usuarios" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;strokeColor=#AD1457;fontSize=11;fontStyle=1;" target="cotizaciones" value="1:N vendedor">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_cotizaciones_seguimiento" edge="1" parent="1" source="cotizaciones" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;strokeColor=#AD1457;fontSize=11;fontStyle=1;" target="seguimiento" value="1:N">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_cotizaciones_detalle" edge="1" parent="1" source="cotizaciones" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;strokeColor=#AD1457;fontSize=11;fontStyle=1;" target="cotizacion_detalle" value="1:N">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_categorias_productos" edge="1" parent="1" source="categorias" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;strokeColor=#F9A825;fontSize=11;fontStyle=1;" target="productos" value="1:N">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_productos_detalle" edge="1" parent="1" source="productos" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;strokeColor=#AD1457;fontSize=11;fontStyle=1;" target="cotizacion_detalle" value="1:N">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_pagina_seccion" edge="1" parent="1" source="pagina" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;strokeColor=#6A1B9A;fontSize=11;fontStyle=1;" target="seccion" value="1:N">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

@@ -9,6 +9,7 @@ import { PoliciesModule } from './modules/policies/policies.module';
 import { ProductsModule } from './modules/products/products.module';
 import { CategoriesModule } from './modules/categories/categories.module';
 import { BitacoraModule } from './modules/bitacora/bitacora.module';
+import { ChatbotModule } from './modules/chatbot/chatbot.module';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { BitacoraModule } from './modules/bitacora/bitacora.module';
     ProductsModule,
     CategoriesModule,
     BitacoraModule,
+    ChatbotModule,
   ],
 })
 export class AppModule {}

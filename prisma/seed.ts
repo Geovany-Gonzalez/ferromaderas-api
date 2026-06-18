@@ -12,6 +12,7 @@ async function main() {
     { slug: 'view_bitacora', name: 'Ver bitácora de auditoría' },
     { slug: 'manage_users', name: 'Crear usuarios / Resetear contraseñas' },
     { slug: 'manage_policies', name: 'Gestionar políticas de compra' },
+    { slug: 'manage_chatbot', name: 'Gestionar chatbot (FAQs y métricas)' },
   ];
 
   for (const p of perms) {
@@ -132,7 +133,57 @@ async function main() {
     }
   }
 
-  console.log('Seed completado (roles, permisos, usuario admin y políticas).');
+  // Chatbot: preguntas frecuentes iniciales (solo si la tabla está vacía)
+  const faqCount = await prisma.chatFaq.count();
+  if (faqCount === 0) {
+    const faqs = [
+      {
+        question: '¿Cuál es la ubicación?',
+        answer:
+          'Estamos ubicados en nuestra sede de Ferromaderas. Podés ver el mapa y cómo llegar en la sección "Ubicación" del menú.',
+        keywords: 'ubicacion,direccion,donde,mapa,llegar,como llego,sucursal',
+        order: 1,
+      },
+      {
+        question: '¿Cuáles son los horarios de atención?',
+        answer: 'Atendemos de lunes a sábado de 7:30 am a 5:30 pm. Domingos cerrado.',
+        keywords: 'horario,horarios,hora,atienden,abierto,abren,cierran,domingo',
+        order: 2,
+      },
+      {
+        question: '¿Hacen envíos a domicilio?',
+        answer:
+          'Sí, realizamos envíos. El costo del flete depende de la zona, la distancia y los productos, y se confirma antes de cerrar el pedido por WhatsApp.',
+        keywords: 'envio,envios,domicilio,flete,entrega,reparto,llevan',
+        order: 3,
+      },
+      {
+        question: '¿Qué métodos de pago aceptan?',
+        answer: 'Aceptamos efectivo y transferencia bancaria.',
+        keywords: 'pago,pagos,pagar,efectivo,transferencia,tarjeta,metodos de pago',
+        order: 4,
+      },
+      {
+        question: '¿Cómo obtengo una cotización?',
+        answer:
+          'Agregá los productos al carrito y luego, desde "Ver carrito", generá tu cotización. Se crea un enlace para enviarla por WhatsApp y que un asesor te atienda.',
+        keywords: 'cotizacion,cotizar,precio,presupuesto,carrito,comprar',
+        order: 5,
+      },
+      {
+        question: '¿Qué productos ofrecen?',
+        answer:
+          'Tenemos materiales de construcción y ferretería. Podés explorar el catálogo por categorías desde el menú o usar el buscador del sitio.',
+        keywords: 'productos,catalogo,venden,ofrecen,materiales,categorias',
+        order: 6,
+      },
+    ];
+    for (const f of faqs) {
+      await prisma.chatFaq.create({ data: f });
+    }
+  }
+
+  console.log('Seed completado (roles, permisos, usuario admin, políticas y FAQs del chatbot).');
 }
 
 main()
