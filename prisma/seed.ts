@@ -104,6 +104,21 @@ async function main() {
     update: { email: 'admin@ferromaderas.com', passwordHash, roleId: admin.id },
   });
 
+  // Vendedor de ejemplo para asignar a cotizaciones y probar el flujo comercial.
+  const vendedorHash = await bcrypt.hash('Vendedor123!', 10);
+  await prisma.user.upsert({
+    where: { username: 'vendedor1' },
+    create: {
+      email: 'vendedor1@ferromaderas.com',
+      username: 'vendedor1',
+      passwordHash: vendedorHash,
+      name: 'Vendedor Demo',
+      status: 'activo',
+      roleId: vendedor.id,
+    },
+    update: { roleId: vendedor.id },
+  });
+
   // Políticas de compra: crear página por defecto si no existe
   let policyPage = await prisma.policyPage.findFirst();
   if (!policyPage) {

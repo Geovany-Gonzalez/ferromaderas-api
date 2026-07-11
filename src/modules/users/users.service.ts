@@ -294,4 +294,14 @@ export class UsersService {
       orderBy: { name: 'asc' },
     });
   }
+
+  /** Usuarios activos con rol vendedor, para asignarlos a cotizaciones. */
+  async listVendedores() {
+    const users = await this.prisma.user.findMany({
+      where: { status: 'activo', role: { slug: 'vendedor' } },
+      select: { id: true, name: true },
+      orderBy: { name: 'asc' },
+    });
+    return users.map((u) => ({ id: u.id, nombre: u.name }));
+  }
 }

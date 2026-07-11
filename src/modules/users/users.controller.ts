@@ -27,6 +27,14 @@ export class UsersController {
     return this.users.getRoles();
   }
 
+  /** Vendedores activos para asignar a cotizaciones (requiere ver cotizaciones). */
+  @Get('vendedores')
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions('view_quotes')
+  listVendedores() {
+    return this.users.listVendedores();
+  }
+
   @Get()
   @UseGuards(PermissionsGuard)
   @RequirePermissions('manage_users')
