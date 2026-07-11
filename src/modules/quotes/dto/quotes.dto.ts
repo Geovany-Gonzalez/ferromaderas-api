@@ -7,6 +7,7 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  Max,
   MaxLength,
   Min,
   ValidateNested,
@@ -77,4 +78,26 @@ export class AssignVendedorDto {
   @IsString()
   @MaxLength(150)
   vendedorNombre?: string | null;
+}
+
+export class ApplyDiscountDto {
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  porcentaje!: number;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  motivo?: string;
+}
+
+export class ApprovalDecisionDto {
+  @IsIn(['aprobada', 'rechazada'])
+  decision!: 'aprobada' | 'rechazada';
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  nota?: string;
 }

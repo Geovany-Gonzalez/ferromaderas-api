@@ -14,6 +14,15 @@ export const QUOTE_STATUSES = [
 ] as const;
 export type QuoteStatus = (typeof QUOTE_STATUSES)[number];
 
+/** Estados del flujo de aprobación comercial de descuentos. */
+export const APPROVAL_STATES = [
+  'no_requiere',
+  'pendiente',
+  'aprobada',
+  'rechazada',
+] as const;
+export type ApprovalState = (typeof APPROVAL_STATES)[number];
+
 export interface QuoteItemInput {
   productoId?: string;
   codigo: string;
@@ -48,7 +57,15 @@ export interface QuoteDto {
   clienteTelefono?: string;
   clienteDireccion?: string;
   clienteNota?: string;
+  subtotal: number;
+  descuentoPorcentaje: number;
+  descuentoMonto: number;
+  descuentoMotivo?: string;
   total: number;
+  aprobacion: ApprovalState;
+  aprobadoPorNombre?: string;
+  aprobadoEn?: string;
+  aprobacionNota?: string;
   vendedorId?: string;
   vendedorNombre?: string;
   createdAt: string;
@@ -71,6 +88,10 @@ export class QuotesService {
   ) {}
 
   private toDto(row: CotizacionRow, includeItems = true): QuoteDto {
+    const total = Number(row.total);
+    // Compatibilidad con cotizaciones previas a la función de descuentos:
+    // si no hay subtotal registrado, se asume igual al total.
+    const subtotal = Number(row.subtotal) || total;
     const dto: QuoteDto = {
       id: row.id,
       codigo: row.codigo,
@@ -79,7 +100,15 @@ export class QuotesService {
       clienteTelefono: row.clienteTelefono ?? undefined,
       clienteDireccion: row.clienteDireccion ?? undefined,
       clienteNota: row.clienteNota ?? undefined,
-      total: Number(row.total),
+      subtotal,
+      descuentoPorcentaje: Number(row.descuentoPorcentaje),
+      descuentoMonto: Number(row.descuentoMonto),
+      descuentoMotivo: row.descuentoMotivo ?? undefined,
+      total,
+      aprobacion: (row.aprobacion as ApprovalState) ?? 'no_requiere',
+      aprobadoPorNombre: row.aprobadoPorNombre ?? undefined,
+      aprobadoEn: row.aprobadoEn ? row.aprobadoEn.toISOString() : undefined,
+      aprobacionNota: row.aprobacionNota ?? undefined,
       vendedorId: row.vendedorId ?? undefined,
       vendedorNombre: row.vendedorNombre ?? undefined,
       createdAt: row.createdAt.toISOString(),
@@ -148,7 +177,11 @@ export class QuotesService {
         clienteTelefono: input.clienteTelefono?.trim() || null,
         clienteDireccion: input.clienteDireccion?.trim() || null,
         clienteNota: input.clienteNota?.trim() || null,
+        subtotal: total,
+        descuentoPorcentaje: new Decimal(0),
+        descuentoMonto: new Decimal(0),
         total,
+        aprobacion: 'no_requiere',
         ip: meta?.ip ?? null,
         items: { create: itemsData },
       },
@@ -262,6 +295,138 @@ export class QuotesService {
         codigo: existing.codigo,
         vendedorId: vendedorId || null,
         vendedorNombre: vendedorNombre || null,
+      },
+    });
+
+    return this.toDto(row);
+  }
+
+  /**
+   * Registra (o quita, con porcentaje 0) una solicitud de descuento sobre el
+   * subtotal. Política del negocio: TODO descuento requiere autorización de un
+   * gerente. Por eso, al solicitarlo la cotización queda en estado `pendiente`
+   * y el descuento NO se aplica al total hasta que sea aprobado.
+   */
+  async applyDiscount(
+    id: string,
+    porcentaje: number,
+    motivo: string | null,
+    meta?: QuoteAuditMeta,
+  ): Promise<QuoteDto> {
+    if (porcentaje < 0 || porcentaje > 100) {
+      throw new BadRequestException('El descuento debe estar entre 0 y 100%.');
+    }
+    const existing = await this.prisma.cotizacion.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException('Cotización no encontrada');
+
+    const subtotal = new Decimal(existing.subtotal ?? existing.total);
+    const pct = new Decimal(porcentaje);
+    const descuentoMonto = subtotal.mul(pct).div(100).toDecimalPlaces(2);
+
+    // Con porcentaje 0 se elimina el descuento (no requiere aprobación).
+    // Cualquier descuento mayor a 0 queda pendiente de aprobación y el total
+    // se mantiene en el subtotal hasta que un gerente lo apruebe.
+    const aprobacion: ApprovalState = porcentaje === 0 ? 'no_requiere' : 'pendiente';
+
+    const row = await this.prisma.cotizacion.update({
+      where: { id },
+      data: {
+        subtotal,
+        descuentoPorcentaje: pct,
+        descuentoMonto,
+        descuentoMotivo: motivo?.trim() || null,
+        // El descuento se hará efectivo en el total únicamente al aprobarse.
+        total: subtotal,
+        aprobacion,
+        // Al recalcular el descuento se limpia cualquier aprobación previa.
+        aprobadoPorId: null,
+        aprobadoPorNombre: null,
+        aprobadoEn: null,
+        aprobacionNota: null,
+      },
+      include: { items: true },
+    });
+
+    await this.bitacora.registrar({
+      modulo: 'cotizaciones',
+      accion: porcentaje === 0 ? 'quitar_descuento' : 'solicitar_descuento',
+      usuarioId: meta?.usuarioId,
+      ip: meta?.ip,
+      detalles: {
+        cotizacionId: id,
+        codigo: existing.codigo,
+        porcentaje,
+        descuentoMontoSolicitado: Number(descuentoMonto),
+        subtotal: Number(subtotal),
+        requiereAprobacion: porcentaje > 0,
+      },
+    });
+
+    return this.toDto(row);
+  }
+
+  /**
+   * Resuelve el flujo de aprobación de un descuento pendiente.
+   * Solo aplica a cotizaciones en estado `pendiente`. Si se aprueba, el
+   * descuento se hace efectivo en el total; si se rechaza, no se concede y el
+   * total permanece igual al subtotal.
+   */
+  async decideApproval(
+    id: string,
+    decision: 'aprobada' | 'rechazada',
+    nota: string | null,
+    aprobador: { id?: string; nombre?: string },
+    meta?: QuoteAuditMeta,
+  ): Promise<QuoteDto> {
+    if (decision !== 'aprobada' && decision !== 'rechazada') {
+      throw new BadRequestException('Decisión de aprobación inválida.');
+    }
+    const existing = await this.prisma.cotizacion.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException('Cotización no encontrada');
+    if (existing.aprobacion !== 'pendiente') {
+      throw new BadRequestException(
+        'La cotización no tiene un descuento pendiente de aprobación.',
+      );
+    }
+
+    const rechazada = decision === 'rechazada';
+    const subtotal = new Decimal(existing.subtotal ?? existing.total);
+    const descuentoMonto = new Decimal(existing.descuentoMonto ?? 0);
+
+    const row = await this.prisma.cotizacion.update({
+      where: { id },
+      data: {
+        aprobacion: decision,
+        aprobadoPorId: aprobador.id ?? null,
+        aprobadoPorNombre: aprobador.nombre ?? null,
+        aprobadoEn: new Date(),
+        aprobacionNota: nota?.trim() || null,
+        ...(rechazada
+          ? {
+              // Rechazado: el descuento no se concede, el total es el subtotal.
+              descuentoPorcentaje: new Decimal(0),
+              descuentoMonto: new Decimal(0),
+              total: subtotal,
+            }
+          : {
+              // Aprobado: el descuento se hace efectivo en el total.
+              total: subtotal.sub(descuentoMonto),
+            }),
+      },
+      include: { items: true },
+    });
+
+    await this.bitacora.registrar({
+      modulo: 'cotizaciones',
+      accion: rechazada ? 'rechazar_descuento' : 'aprobar_descuento',
+      usuarioId: meta?.usuarioId,
+      ip: meta?.ip,
+      detalles: {
+        cotizacionId: id,
+        codigo: existing.codigo,
+        porcentajeSolicitado: Number(existing.descuentoPorcentaje),
+        aprobadoPor: aprobador.nombre ?? null,
+        nota: nota?.trim() || null,
       },
     });
 

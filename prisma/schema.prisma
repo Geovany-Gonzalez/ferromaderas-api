@@ -153,7 +153,18 @@ model Cotizacion {
   clienteTelefono String? @map("cliente_telefono")
   clienteDireccion String? @map("cliente_direccion") @db.Text
   clienteNota   String?  @map("cliente_nota") @db.Text
+  // subtotal = suma bruta de líneas; total = subtotal - descuentoMonto (precio final).
+  subtotal            Decimal  @default(0) @db.Decimal(12, 2)
+  descuentoPorcentaje Decimal  @default(0) @map("descuento_porcentaje") @db.Decimal(5, 2)
+  descuentoMonto      Decimal  @default(0) @map("descuento_monto") @db.Decimal(12, 2)
+  descuentoMotivo     String?  @map("descuento_motivo") @db.Text
   total         Decimal  @default(0) @db.Decimal(12, 2)
+  // Flujo de aprobación comercial: no_requiere | pendiente | aprobada | rechazada
+  aprobacion        String    @default("no_requiere") @map("aprobacion")
+  aprobadoPorId     String?   @map("aprobado_por_id")
+  aprobadoPorNombre String?   @map("aprobado_por_nombre")
+  aprobadoEn        DateTime? @map("aprobado_en")
+  aprobacionNota    String?   @map("aprobacion_nota") @db.Text
   vendedorId    String?  @map("vendedor_id")
   vendedorNombre String? @map("vendedor_nombre")
   ip            String?  @map("ip")
@@ -163,6 +174,7 @@ model Cotizacion {
   items CotizacionItem[]
 
   @@index([estado])
+  @@index([aprobacion])
   @@map("cotizaciones")
 }
 
