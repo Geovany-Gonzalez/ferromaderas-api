@@ -8,7 +8,14 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../../core/database/prisma.service';
 import { MailService } from '../mail/mail.service';
+import { BitacoraService } from '../bitacora/bitacora.service';
 import * as bcrypt from 'bcrypt';
+
+/** Metadatos de auditoría para registrar quién ejecuta la acción y desde dónde. */
+export interface AuditMeta {
+  usuarioId?: string;
+  ip?: string;
+}
 
 /** Normaliza teléfono: solo dígitos. El +502 se agrega en el frontend al mostrar. */
 function normalizePhone(phone: string | undefined): string | null {
@@ -34,6 +41,7 @@ export class UsersService {
     private readonly mail: MailService,
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
+    private readonly bitacora: BitacoraService,
   ) {}
 
   async findByEmail(email: string) {
@@ -112,15 +120,18 @@ export class UsersService {
     }));
   }
 
-  async create(data: {
-    username: string;
-    email: string;
-    password: string;
-    name: string;
-    phone?: string;
-    roleSlug: string;
-    status?: string;
-  }) {
+  async create(
+    data: {
+      username: string;
+      email: string;
+      password: string;
+      name: string;
+      phone?: string;
+      roleSlug: string;
+      status?: string;
+    },
+    meta?: AuditMeta,
+  ) {
     const username = data.username.trim().toLowerCase();
     const email = data.email.trim().toLowerCase();
 
@@ -153,6 +164,17 @@ export class UsersService {
         mustChangePassword: true,
       },
       include: { role: true },
+    });
+    await this.bitacora.registrar({
+      modulo: 'usuarios',
+      accion: 'crear',
+      usuarioId: meta?.usuarioId,
+      detalles: {
+        usuarioCreadoId: user.id,
+        username: user.username,
+        rol: user.role.slug,
+      },
+      ip: meta?.ip,
     });
     const token = this.jwt.sign(
       { sub: user.id, purpose: 'force-password-change' },
@@ -189,6 +211,7 @@ export class UsersService {
       roleSlug?: string;
       status?: string;
     },
+    meta?: AuditMeta,
   ) {
     const update: Record<string, unknown> = {};
     if (data.name !== undefined) update.name = data.name.trim();
@@ -216,6 +239,17 @@ export class UsersService {
       where: { id },
       data: update,
       include: { role: true },
+    });
+    await this.bitacora.registrar({
+      modulo: 'usuarios',
+      accion: 'actualizar',
+      usuarioId: meta?.usuarioId,
+      detalles: {
+        usuarioActualizadoId: user.id,
+        username: user.username,
+        cambios: Object.keys(update),
+      },
+      ip: meta?.ip,
     });
     return {
       id: user.id,

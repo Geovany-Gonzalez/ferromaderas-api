@@ -6,12 +6,16 @@ import {
   Body,
   Param,
   Query,
+  Req,
   UseGuards,
 } from '@nestjs/common';
+import type { Request } from 'express';
 import { UsersService } from './users.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/permissions.guard';
 import { RequirePermissions } from '../auth/permissions.decorator';
+import { CurrentUser } from '../auth/current-user.decorator';
+import type { UserPayload } from '../auth/auth.types';
 
 @Controller('users')
 @UseGuards(JwtAuthGuard)
@@ -48,16 +52,21 @@ export class UsersController {
       role: string;
       status?: string;
     },
+    @CurrentUser() actor: UserPayload,
+    @Req() req: Request,
   ) {
-    return this.users.create({
-      username: body.username,
-      email: body.email,
-      password: body.password,
-      name: body.name,
-      phone: body.phone,
-      roleSlug: body.role,
-      status: body.status,
-    });
+    return this.users.create(
+      {
+        username: body.username,
+        email: body.email,
+        password: body.password,
+        name: body.name,
+        phone: body.phone,
+        roleSlug: body.role,
+        status: body.status,
+      },
+      { usuarioId: actor?.sub, ip: req.ip ?? req.socket?.remoteAddress },
+    );
   }
 
   @Put(':id')
@@ -73,14 +82,20 @@ export class UsersController {
       role?: string;
       status?: string;
     },
+    @CurrentUser() actor: UserPayload,
+    @Req() req: Request,
   ) {
-    return this.users.update(id, {
-      name: body.name,
-      email: body.email,
-      phone: body.phone,
-      roleSlug: body.role,
-      status: body.status,
-    });
+    return this.users.update(
+      id,
+      {
+        name: body.name,
+        email: body.email,
+        phone: body.phone,
+        roleSlug: body.role,
+        status: body.status,
+      },
+      { usuarioId: actor?.sub, ip: req.ip ?? req.socket?.remoteAddress },
+    );
   }
 
 }

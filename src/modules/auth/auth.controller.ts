@@ -7,9 +7,10 @@ import {
   ServiceUnavailableException,
   UnauthorizedException,
   Res,
+  Req,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import type { Response } from 'express';
+import type { Request, Response } from 'express';
 import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { CurrentUser } from './current-user.decorator';
@@ -27,9 +28,14 @@ export class AuthController {
   async login(
     @Body() body: { username: string; password: string },
     @Res({ passthrough: true }) res: Response,
+    @Req() req: Request,
   ) {
     try {
-      const result = await this.auth.login(body.username, body.password);
+      const result = await this.auth.login(
+        body.username,
+        body.password,
+        req.ip ?? req.socket?.remoteAddress,
+      );
       setAuthCookie(res, result.access_token, this.config);
       return { user: result.user };
     } catch (err: unknown) {

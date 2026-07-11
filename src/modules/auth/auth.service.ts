@@ -4,6 +4,7 @@ import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { UsersService } from '../users/users.service';
 import { MailService } from '../mail/mail.service';
+import { BitacoraService } from '../bitacora/bitacora.service';
 import type { UserPayload } from './auth.types';
 
 @Injectable()
@@ -15,6 +16,7 @@ export class AuthService {
     private readonly jwt: JwtService,
     private readonly mail: MailService,
     private readonly config: ConfigService,
+    private readonly bitacora: BitacoraService,
   ) {}
 
   async validateUser(username: string, password: string) {
@@ -24,9 +26,15 @@ export class AuthService {
     return ok ? user : null;
   }
 
-  async login(username: string, password: string) {
+  async login(username: string, password: string, ip?: string) {
     const user = await this.validateUser(username, password);
     if (!user) {
+      await this.bitacora.registrar({
+        modulo: 'auth',
+        accion: 'login_fallido',
+        detalles: { username: username?.trim()?.toLowerCase() ?? null },
+        ip,
+      });
       throw new UnauthorizedException('Usuario o contraseña incorrectos');
     }
     if (user.mustChangePassword) {
@@ -41,6 +49,13 @@ export class AuthService {
       role: user.role.slug,
       permissions: user.role.permissions.map((rp) => rp.permission.slug),
     };
+    await this.bitacora.registrar({
+      modulo: 'auth',
+      accion: 'login',
+      usuarioId: user.id,
+      detalles: { username: user.username, role: user.role.slug },
+      ip,
+    });
     return {
       access_token: this.jwt.sign(payload),
       user: {
