@@ -178,6 +178,69 @@ export class MailService {
     return this.send(to, subject, text, html, this.getLogoAttachments());
   }
 
+  /** Envía la cotización al cliente con el detalle de productos y el enlace de consulta. */
+  async sendQuote(
+    to: string,
+    quote: {
+      codigo: string;
+      clienteNombre?: string;
+      total: number;
+      items: { codigo: string; nombre: string; cantidad: number; precioUnitario: number; subtotal: number }[];
+    },
+    publicUrl: string,
+  ): Promise<boolean> {
+    const subject = `Tu cotización ${quote.codigo} - Ferromaderas`;
+    const saludo = quote.clienteNombre?.trim()
+      ? `Hola ${quote.clienteNombre.trim()},`
+      : 'Hola,';
+
+    const fmtQ = (n: number) => `Q${n.toLocaleString('es-GT')}`;
+    const filasTexto = quote.items
+      .map((it) => `• ${it.codigo} - ${it.nombre}\n  ${it.cantidad} x ${fmtQ(it.precioUnitario)} = ${fmtQ(it.subtotal)}`)
+      .join('\n');
+    const text = `${saludo}\n\nGracias por tu interés en Ferromaderas. Aquí está tu cotización ${quote.codigo}:\n\n${filasTexto}\n\nTotal: ${fmtQ(quote.total)}\n\nPuedes consultarla en línea aquí:\n${publicUrl}\n\n— Ferromaderas`;
+
+    const filasHtml = quote.items
+      .map(
+        (it) => `
+          <tr>
+            <td style="padding:8px 6px;border-bottom:1px solid #e2e8f0;font-size:15px;">
+              <strong>${it.codigo}</strong><br><span style="color:#64748b;">${it.nombre}</span>
+            </td>
+            <td style="padding:8px 6px;border-bottom:1px solid #e2e8f0;text-align:center;font-size:15px;">${it.cantidad}</td>
+            <td style="padding:8px 6px;border-bottom:1px solid #e2e8f0;text-align:right;font-size:15px;">${fmtQ(it.precioUnitario)}</td>
+            <td style="padding:8px 6px;border-bottom:1px solid #e2e8f0;text-align:right;font-size:15px;">${fmtQ(it.subtotal)}</td>
+          </tr>`,
+      )
+      .join('');
+
+    const hasLogo = !!this.logoPath;
+    const html = this.emailTemplate(
+      `<p style="font-size:20px;margin:0 0 16px;">${saludo}</p>
+       <p style="font-size:18px;margin:0 0 16px;">Gracias por tu interés en <strong>Ferromaderas</strong>. Esta es tu cotización <strong>${quote.codigo}</strong>:</p>`,
+      `
+        <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin:8px 0 16px;">
+          <thead>
+            <tr style="background:#f1f5f9;">
+              <th style="padding:8px 6px;text-align:left;font-size:14px;color:#334155;">Producto</th>
+              <th style="padding:8px 6px;text-align:center;font-size:14px;color:#334155;">Cant.</th>
+              <th style="padding:8px 6px;text-align:right;font-size:14px;color:#334155;">Precio</th>
+              <th style="padding:8px 6px;text-align:right;font-size:14px;color:#334155;">Subtotal</th>
+            </tr>
+          </thead>
+          <tbody>${filasHtml}</tbody>
+        </table>
+        <p style="font-size:20px;margin:0 0 20px;text-align:right;"><strong>Total: ${fmtQ(quote.total)}</strong></p>
+        <p style="text-align:center;margin:28px 0;">
+          <a href="${publicUrl}" style="background:#1e3a8a;color:white!important;padding:14px 28px;text-decoration:none;border-radius:8px;display:inline-block;font-weight:600;font-size:18px;">Ver cotización en línea</a>
+        </p>
+        <p style="color:#64748b;font-size:15px;margin:16px 0 0;">Los precios pueden variar según disponibilidad. Un asesor te contactará para finalizar tu pedido.</p>
+      `,
+      hasLogo,
+    );
+    return this.send(to, subject, text, html, this.getLogoAttachments());
+  }
+
   async sendPasswordReset(
     to: string,
     username: string,

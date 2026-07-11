@@ -151,6 +151,7 @@ model Cotizacion {
   estado        String   @default("nueva") @map("estado") // nueva | en_seguimiento | confirmada | cerrada | cancelada
   clienteNombre String?  @map("cliente_nombre")
   clienteTelefono String? @map("cliente_telefono")
+  clienteEmail  String?  @map("cliente_email")
   clienteDireccion String? @map("cliente_direccion") @db.Text
   clienteNota   String?  @map("cliente_nota") @db.Text
   // subtotal = suma bruta de líneas; total = subtotal - descuentoMonto (precio final).

@@ -1,8 +1,10 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Prisma } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/library';
 import { PrismaService } from '../../core/database/prisma.service';
 import { BitacoraService } from '../bitacora/bitacora.service';
+import { MailService } from '../mail/mail.service';
 
 /** Estados válidos del ciclo de vida de una cotización. */
 export const QUOTE_STATUSES = [
@@ -34,6 +36,7 @@ export interface QuoteItemInput {
 export interface CreateQuoteInput {
   clienteNombre?: string;
   clienteTelefono?: string;
+  clienteEmail?: string;
   clienteDireccion?: string;
   clienteNota?: string;
   items: QuoteItemInput[];
@@ -55,6 +58,7 @@ export interface QuoteDto {
   estado: QuoteStatus;
   clienteNombre?: string;
   clienteTelefono?: string;
+  clienteEmail?: string;
   clienteDireccion?: string;
   clienteNota?: string;
   subtotal: number;
@@ -85,6 +89,8 @@ export class QuotesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly bitacora: BitacoraService,
+    private readonly mail: MailService,
+    private readonly config: ConfigService,
   ) {}
 
   private toDto(row: CotizacionRow, includeItems = true): QuoteDto {
@@ -98,6 +104,7 @@ export class QuotesService {
       estado: row.estado as QuoteStatus,
       clienteNombre: row.clienteNombre ?? undefined,
       clienteTelefono: row.clienteTelefono ?? undefined,
+      clienteEmail: row.clienteEmail ?? undefined,
       clienteDireccion: row.clienteDireccion ?? undefined,
       clienteNota: row.clienteNota ?? undefined,
       subtotal,
@@ -175,6 +182,7 @@ export class QuotesService {
         estado: 'nueva',
         clienteNombre: input.clienteNombre?.trim() || null,
         clienteTelefono: input.clienteTelefono?.trim() || null,
+        clienteEmail: input.clienteEmail?.trim().toLowerCase() || null,
         clienteDireccion: input.clienteDireccion?.trim() || null,
         clienteNota: input.clienteNota?.trim() || null,
         subtotal: total,
@@ -431,5 +439,65 @@ export class QuotesService {
     });
 
     return this.toDto(row);
+  }
+
+  /**
+   * Socializa la cotización con el cliente por correo (SMTP). Usa el correo
+   * guardado en la cotización, o uno indicado por el asesor al momento de
+   * enviarla. Registra el envío en la bitácora.
+   */
+  async sendByEmail(
+    id: string,
+    emailOverride: string | null,
+    meta?: QuoteAuditMeta,
+  ): Promise<{ ok: boolean; email: string }> {
+    const row = await this.prisma.cotizacion.findUnique({
+      where: { id },
+      include: { items: true },
+    });
+    if (!row) throw new NotFoundException('Cotización no encontrada');
+
+    const email = (emailOverride?.trim() || row.clienteEmail || '').toLowerCase();
+    if (!email) {
+      throw new BadRequestException(
+        'No hay un correo del cliente para enviar la cotización.',
+      );
+    }
+    if (!this.mail.isConfigured()) {
+      throw new BadRequestException(
+        'El servicio de correo no está configurado en el servidor.',
+      );
+    }
+
+    const frontendUrl =
+      this.config.get<string>('FRONTEND_URL') ?? 'http://localhost:4200';
+    const publicUrl = `${frontendUrl}/carrito?code=${encodeURIComponent(row.codigo)}`;
+
+    await this.mail.sendQuote(
+      email,
+      {
+        codigo: row.codigo,
+        clienteNombre: row.clienteNombre ?? undefined,
+        total: Number(row.total),
+        items: row.items.map((it) => ({
+          codigo: it.codigo,
+          nombre: it.nombre,
+          cantidad: it.cantidad,
+          precioUnitario: Number(it.precioUnitario),
+          subtotal: Number(it.subtotal),
+        })),
+      },
+      publicUrl,
+    );
+
+    await this.bitacora.registrar({
+      modulo: 'cotizaciones',
+      accion: 'enviar_correo',
+      usuarioId: meta?.usuarioId,
+      ip: meta?.ip,
+      detalles: { cotizacionId: id, codigo: row.codigo, email },
+    });
+
+    return { ok: true, email };
   }
 }

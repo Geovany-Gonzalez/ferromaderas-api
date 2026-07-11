@@ -16,6 +16,7 @@ import {
   ApprovalDecisionDto,
   AssignVendedorDto,
   CreateQuoteDto,
+  SendQuoteEmailDto,
   UpdateStatusDto,
 } from './dto/quotes.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -110,6 +111,22 @@ export class QuotesController {
     @Req() req: Request,
   ) {
     return this.quotes.applyDiscount(id, body.porcentaje, body.motivo ?? null, {
+      usuarioId: user?.sub,
+      ip: req.ip ?? req.socket?.remoteAddress,
+    });
+  }
+
+  /** Admin: envía la cotización al cliente por correo (socialización SMTP). */
+  @Post(':id/enviar-correo')
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermissions('view_quotes')
+  sendByEmail(
+    @Param('id') id: string,
+    @Body() body: SendQuoteEmailDto,
+    @CurrentUser() user: UserPayload,
+    @Req() req: Request,
+  ) {
+    return this.quotes.sendByEmail(id, body.email ?? null, {
       usuarioId: user?.sub,
       ip: req.ip ?? req.socket?.remoteAddress,
     });

@@ -2,6 +2,7 @@ import { Type } from 'class-transformer';
 import {
   ArrayMinSize,
   IsArray,
+  IsEmail,
   IsIn,
   IsInt,
   IsNumber,
@@ -46,6 +47,11 @@ export class CreateQuoteDto {
   @IsString()
   @MaxLength(40)
   clienteTelefono?: string;
+
+  @IsOptional()
+  @IsEmail()
+  @MaxLength(150)
+  clienteEmail?: string;
 
   @IsOptional()
   @IsString()
@@ -100,4 +106,11 @@ export class ApprovalDecisionDto {
   @IsString()
   @MaxLength(500)
   nota?: string;
+}
+
+export class SendQuoteEmailDto {
+  @IsOptional()
+  @IsEmail()
+  @MaxLength(150)
+  email?: string;
 }
