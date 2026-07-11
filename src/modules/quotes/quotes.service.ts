@@ -1,4 +1,9 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Prisma } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/library';
@@ -86,6 +91,8 @@ type CotizacionRow = Prisma.CotizacionGetPayload<{ include: { items: true } }>;
 
 @Injectable()
 export class QuotesService {
+  private readonly logger = new Logger(QuotesService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly bitacora: BitacoraService,
@@ -210,7 +217,62 @@ export class QuotesService {
       },
     });
 
+    // Si el cliente dejó su correo, se le envía automáticamente una copia de la
+    // cotización (socialización). No bloquea ni hace fallar la creación: si el
+    // SMTP falla, la cotización igual queda guardada y se registra la advertencia.
+    const emailCliente = row.clienteEmail;
+    if (emailCliente && this.mail.isConfigured()) {
+      this.dispatchQuoteEmail(row, emailCliente)
+        .then(() =>
+          this.bitacora.registrar({
+            modulo: 'cotizaciones',
+            accion: 'enviar_correo',
+            usuarioId: meta?.usuarioId,
+            ip: meta?.ip,
+            detalles: {
+              cotizacionId: row.id,
+              codigo: row.codigo,
+              email: emailCliente,
+              origen: 'automatico',
+            },
+          }),
+        )
+        .catch((e) =>
+          this.logger.warn(
+            `No se pudo enviar el correo automático de la cotización ${row.codigo}: ${
+              e instanceof Error ? e.message : String(e)
+            }`,
+          ),
+        );
+    }
+
     return this.toDto(row);
+  }
+
+  /** Arma y envía por SMTP el correo con el detalle de la cotización y su enlace público. */
+  private async dispatchQuoteEmail(
+    row: CotizacionRow,
+    email: string,
+  ): Promise<void> {
+    const frontendUrl =
+      this.config.get<string>('FRONTEND_URL') ?? 'http://localhost:4200';
+    const publicUrl = `${frontendUrl}/carrito?code=${encodeURIComponent(row.codigo)}`;
+    await this.mail.sendQuote(
+      email,
+      {
+        codigo: row.codigo,
+        clienteNombre: row.clienteNombre ?? undefined,
+        total: Number(row.total),
+        items: row.items.map((it) => ({
+          codigo: it.codigo,
+          nombre: it.nombre,
+          cantidad: it.cantidad,
+          precioUnitario: Number(it.precioUnitario),
+          subtotal: Number(it.subtotal),
+        })),
+      },
+      publicUrl,
+    );
   }
 
   async findAll(): Promise<QuoteDto[]> {
@@ -469,26 +531,7 @@ export class QuotesService {
       );
     }
 
-    const frontendUrl =
-      this.config.get<string>('FRONTEND_URL') ?? 'http://localhost:4200';
-    const publicUrl = `${frontendUrl}/carrito?code=${encodeURIComponent(row.codigo)}`;
-
-    await this.mail.sendQuote(
-      email,
-      {
-        codigo: row.codigo,
-        clienteNombre: row.clienteNombre ?? undefined,
-        total: Number(row.total),
-        items: row.items.map((it) => ({
-          codigo: it.codigo,
-          nombre: it.nombre,
-          cantidad: it.cantidad,
-          precioUnitario: Number(it.precioUnitario),
-          subtotal: Number(it.subtotal),
-        })),
-      },
-      publicUrl,
-    );
+    await this.dispatchQuoteEmail(row, email);
 
     await this.bitacora.registrar({
       modulo: 'cotizaciones',
