@@ -7,6 +7,7 @@ import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
 import { PoliciesModule } from './modules/policies/policies.module';
 import { ProductsModule } from './modules/products/products.module';
+import { QuotesModule } from './modules/quotes/quotes.module';
 import { CategoriesModule } from './modules/categories/categories.module';
 import { BitacoraModule } from './modules/bitacora/bitacora.module';
 import { ChatbotModule } from './modules/chatbot/chatbot.module';
@@ -24,6 +25,7 @@ import { ChatbotModule } from './modules/chatbot/chatbot.module';
     UsersModule,
     PoliciesModule,
     ProductsModule,
+    QuotesModule,
     CategoriesModule,
     BitacoraModule,
     ChatbotModule,

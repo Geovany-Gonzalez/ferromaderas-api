@@ -139,6 +139,50 @@ model PolicySection {
 }
 
 // ---------------------------------------------------------------------------
+// Cotizaciones (generadas desde el carrito público, gestionadas en el panel)
+// ---------------------------------------------------------------------------
+// Los datos del cliente se guardan de forma denormalizada dentro de la
+// cotización (el sitio público no requiere registro). El nombre y el precio
+// del producto se copian en cada línea para conservar el histórico aunque el
+// producto cambie o se elimine más adelante.
+model Cotizacion {
+  id            String   @id @default(uuid())
+  codigo        String   @unique @map("codigo") // FM-YYYY-XXXX
+  estado        String   @default("nueva") @map("estado") // nueva | en_seguimiento | confirmada | cerrada | cancelada
+  clienteNombre String?  @map("cliente_nombre")
+  clienteTelefono String? @map("cliente_telefono")
+  clienteDireccion String? @map("cliente_direccion") @db.Text
+  clienteNota   String?  @map("cliente_nota") @db.Text
+  total         Decimal  @default(0) @db.Decimal(12, 2)
+  vendedorId    String?  @map("vendedor_id")
+  vendedorNombre String? @map("vendedor_nombre")
+  ip            String?  @map("ip")
+  createdAt     DateTime @default(now()) @map("creado_en")
+  updatedAt     DateTime @updatedAt @map("actualizado_en")
+
+  items CotizacionItem[]
+
+  @@index([estado])
+  @@map("cotizaciones")
+}
+
+model CotizacionItem {
+  id             String  @id @default(uuid())
+  cotizacionId   String  @map("cotizacion_id")
+  productoId     String? @map("producto_id")
+  codigo         String  @map("codigo")
+  nombre         String  @map("nombre")
+  precioUnitario Decimal @map("precio_unitario") @db.Decimal(10, 2)
+  cantidad       Int     @map("cantidad")
+  subtotal       Decimal @map("subtotal") @db.Decimal(12, 2)
+
+  cotizacion Cotizacion @relation(fields: [cotizacionId], references: [id], onDelete: Cascade)
+
+  @@index([cotizacionId])
+  @@map("cotizacion_items")
+}
+
+// ---------------------------------------------------------------------------
 // Bitácora (auditoría para todo el sistema)
 // ---------------------------------------------------------------------------
 model Bitacora {
