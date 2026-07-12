@@ -168,15 +168,38 @@ model Cotizacion {
   aprobacionNota    String?   @map("aprobacion_nota") @db.Text
   vendedorId    String?  @map("vendedor_id")
   vendedorNombre String? @map("vendedor_nombre")
+  /** Usuario registrado (rol cliente) vinculado a esta cotización. */
+  clienteRegistradoId String? @map("cliente_registrado_id")
   ip            String?  @map("ip")
   createdAt     DateTime @default(now()) @map("creado_en")
   updatedAt     DateTime @updatedAt @map("actualizado_en")
 
-  items CotizacionItem[]
+  items       CotizacionItem[]
+  seguimiento SeguimientoCotizacion[]
 
   @@index([estado])
   @@index([aprobacion])
+  @@index([clienteRegistradoId])
+  @@index([clienteEmail])
   @@map("cotizaciones")
+}
+
+/** Historial de seguimiento comercial (Cap. III §3.4.3). */
+model SeguimientoCotizacion {
+  id              String   @id @default(uuid())
+  cotizacionId    String   @map("cotizacion_id")
+  tipo            String   @default("cambio_estado") @map("tipo")
+  estadoAnterior  String?  @map("estado_anterior")
+  estadoNuevo     String?  @map("estado_nuevo")
+  comentario      String?  @db.Text
+  usuarioId       String?  @map("usuario_id")
+  usuarioNombre   String?  @map("usuario_nombre")
+  createdAt       DateTime @default(now()) @map("creado_en")
+
+  cotizacion Cotizacion @relation(fields: [cotizacionId], references: [id], onDelete: Cascade)
+
+  @@index([cotizacionId])
+  @@map("seguimiento_cotizacion")
 }
 
 model CotizacionItem {

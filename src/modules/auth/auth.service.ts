@@ -158,4 +158,47 @@ export class AuthService {
       permissions: user.role.permissions.map((rp) => rp.permission.slug),
     };
   }
+
+  /** Registro público de cliente para consultar historial de cotizaciones. */
+  async registerClient(
+    data: { email: string; password: string; name: string; phone?: string },
+    ip?: string,
+  ) {
+    const email = data.email.trim().toLowerCase();
+    if (!email || !data.password?.trim() || !data.name?.trim()) {
+      throw new UnauthorizedException('Correo, nombre y contraseña son obligatorios.');
+    }
+    if (data.password.length < 8) {
+      throw new UnauthorizedException('La contraseña debe tener al menos 8 caracteres.');
+    }
+
+    const user = await this.users.createClient(
+      {
+        email,
+        password: data.password,
+        name: data.name.trim(),
+        phone: data.phone,
+      },
+      { ip },
+    );
+
+    const payload: UserPayload = {
+      sub: user.id,
+      username: user.username,
+      role: user.role.slug,
+      permissions: user.role.permissions.map((rp) => rp.permission.slug),
+    };
+
+    return {
+      access_token: this.jwt.sign(payload),
+      user: {
+        id: user.id,
+        username: user.username,
+        name: user.name,
+        email: user.email,
+        role: user.role.slug,
+        permissions: payload.permissions,
+      },
+    };
+  }
 }

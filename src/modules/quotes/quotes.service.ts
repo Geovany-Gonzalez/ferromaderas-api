@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   Logger,
   NotFoundException,
@@ -10,6 +11,7 @@ import { Decimal } from '@prisma/client/runtime/library';
 import { PrismaService } from '../../core/database/prisma.service';
 import { BitacoraService } from '../bitacora/bitacora.service';
 import { MailService } from '../mail/mail.service';
+import type { UserPayload } from '../auth/auth.types';
 
 /** Estados válidos del ciclo de vida de una cotización. */
 export const QUOTE_STATUSES = [
@@ -70,14 +72,14 @@ export interface QuoteDto {
   descuentoPorcentaje: number;
   descuentoMonto: number;
   descuentoMotivo?: string;
-  /** Monto neto gravable (subtotal menos descuento aplicado). */
+  /** Base gravable sin IVA (desglose comercial; precios al cliente ya incluyen IVA). */
   neto: number;
-  /** IVA Guatemala (12%) sobre el neto. */
+  /** IVA Guatemala (12%) incluido en el precio. */
   ivaPorcentaje: number;
   ivaMonto: number;
-  /** Total sin IVA (igual al neto; se conserva por compatibilidad). */
+  /** Total a pagar (precio final al cliente, IVA incluido). */
   total: number;
-  /** Total a pagar incluyendo IVA. */
+  /** Igual al total; se conserva por compatibilidad con integraciones. */
   totalConIva: number;
   aprobacion: ApprovalState;
   aprobadoPorNombre?: string;
@@ -92,7 +94,20 @@ export interface QuoteDto {
 
 export interface QuoteAuditMeta {
   usuarioId?: string;
+  usuarioNombre?: string;
   ip?: string;
+  comentario?: string;
+  clienteRegistradoId?: string;
+}
+
+export interface SeguimientoEntryDto {
+  id: string;
+  tipo: string;
+  estadoAnterior?: string;
+  estadoNuevo?: string;
+  comentario?: string;
+  usuarioNombre?: string;
+  createdAt: string;
 }
 
 /** Tipos de alerta de seguimiento comercial mostrados en el panel admin. */
@@ -136,19 +151,22 @@ export class QuotesService {
     private readonly config: ConfigService,
   ) {}
 
-  private computeIva(neto: number): {
+  /** Desglosa IVA incluido en el precio final (ej. Q100 → neto Q89.29 + IVA Q10.71). */
+  private computeIva(totalIncluido: number): {
     neto: number;
     ivaPorcentaje: number;
     ivaMonto: number;
     totalConIva: number;
   } {
-    const base = Math.max(0, neto);
-    const ivaMonto = Math.round(base * IVA_PORCENTAJE * 100) / 10000;
+    const totalConIva = Math.max(0, totalIncluido);
+    const divisor = 1 + IVA_PORCENTAJE / 100;
+    const neto = Math.round((totalConIva / divisor) * 100) / 100;
+    const ivaMonto = Math.round((totalConIva - neto) * 100) / 100;
     return {
-      neto: base,
+      neto,
       ivaPorcentaje: IVA_PORCENTAJE,
       ivaMonto,
-      totalConIva: Math.round((base + ivaMonto) * 100) / 100,
+      totalConIva,
     };
   }
 
@@ -254,10 +272,19 @@ export class QuotesService {
         descuentoMonto: new Decimal(0),
         total,
         aprobacion: 'no_requiere',
+        clienteRegistradoId: meta?.clienteRegistradoId ?? null,
         ip: meta?.ip ?? null,
         items: { create: itemsData },
       },
       include: { items: true },
+    });
+
+    await this.recordSeguimiento(row.id, {
+      tipo: 'creacion',
+      estadoNuevo: 'nueva',
+      comentario: 'Cotización creada desde el sitio web.',
+      usuarioId: meta?.usuarioId ?? null,
+      usuarioNombre: meta?.usuarioNombre ?? 'Sitio público',
     });
 
     await this.bitacora.registrar({
@@ -515,11 +542,16 @@ export class QuotesService {
       {
         codigo: row.codigo,
         clienteNombre: row.clienteNombre ?? undefined,
-        neto: Number(row.total),
-        ivaPorcentaje: IVA_PORCENTAJE,
-        ivaMonto: this.computeIva(Number(row.total)).ivaMonto,
-        totalConIva: this.computeIva(Number(row.total)).totalConIva,
-        total: Number(row.total),
+        ...(() => {
+          const iva = this.computeIva(Number(row.total));
+          return {
+            neto: iva.neto,
+            ivaPorcentaje: iva.ivaPorcentaje,
+            ivaMonto: iva.ivaMonto,
+            totalConIva: iva.totalConIva,
+            total: iva.totalConIva,
+          };
+        })(),
         items: row.items.map((it) => ({
           codigo: it.codigo,
           nombre: it.nombre,
@@ -561,6 +593,121 @@ export class QuotesService {
     return row ? this.toDto(row) : null;
   }
 
+  /** Cotizaciones del cliente registrado (por id o correo). */
+  async findMisCotizaciones(
+    clienteId: string,
+    email: string,
+  ): Promise<QuoteDto[]> {
+    const normalizedEmail = email.trim().toLowerCase();
+    const rows = await this.prisma.cotizacion.findMany({
+      where: {
+        OR: [
+          { clienteRegistradoId: clienteId },
+          { clienteEmail: normalizedEmail },
+        ],
+      },
+      orderBy: { createdAt: 'desc' },
+      include: { items: true },
+    });
+    return rows.map((r) => this.toDto(r, false));
+  }
+
+  /** Vincula cotizaciones previas (por correo) al usuario cliente recién registrado. */
+  async linkQuotesToCliente(clienteId: string, email: string): Promise<number> {
+    const normalizedEmail = email.trim().toLowerCase();
+    const result = await this.prisma.cotizacion.updateMany({
+      where: {
+        clienteEmail: normalizedEmail,
+        clienteRegistradoId: null,
+      },
+      data: { clienteRegistradoId: clienteId },
+    });
+    return result.count;
+  }
+
+  /** Historial de seguimiento de una cotización. */
+  async getSeguimientoHistorial(id: string): Promise<SeguimientoEntryDto[]> {
+    const rows = await this.prisma.seguimientoCotizacion.findMany({
+      where: { cotizacionId: id },
+      orderBy: { createdAt: 'desc' },
+    });
+    return rows.map((r) => ({
+      id: r.id,
+      tipo: r.tipo,
+      estadoAnterior: r.estadoAnterior ?? undefined,
+      estadoNuevo: r.estadoNuevo ?? undefined,
+      comentario: r.comentario ?? undefined,
+      usuarioNombre: r.usuarioNombre ?? undefined,
+      createdAt: r.createdAt.toISOString(),
+    }));
+  }
+
+  async getUserEmail(userId: string): Promise<{ email: string } | null> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { email: true },
+    });
+    return user ? { email: user.email } : null;
+  }
+
+  /** Valida que el actor pueda ver la cotización (cliente, vendedor o staff). */
+  async assertCanViewQuote(id: string, actor: UserPayload): Promise<void> {
+    const quote = await this.prisma.cotizacion.findUnique({
+      where: { id },
+      select: {
+        clienteRegistradoId: true,
+        clienteEmail: true,
+        vendedorId: true,
+      },
+    });
+    if (!quote) throw new NotFoundException('Cotización no encontrada');
+
+    if (actor.role === 'cliente') {
+      const profile = await this.getUserEmail(actor.sub);
+      const email = profile?.email?.toLowerCase();
+      const allowed =
+        quote.clienteRegistradoId === actor.sub ||
+        (!!email && quote.clienteEmail?.toLowerCase() === email);
+      if (!allowed) {
+        throw new ForbiddenException('No tenés acceso a esta cotización.');
+      }
+      return;
+    }
+
+    const staff =
+      actor.permissions?.includes('view_quotes') || actor.role === 'vendedor';
+    if (!staff) {
+      throw new ForbiddenException('No tenés permiso para ver cotizaciones.');
+    }
+    if (actor.role === 'vendedor' && quote.vendedorId !== actor.sub) {
+      throw new ForbiddenException('Esta cotización no está asignada a vos.');
+    }
+  }
+
+  private async recordSeguimiento(
+    cotizacionId: string,
+    data: {
+      tipo: string;
+      estadoAnterior?: string | null;
+      estadoNuevo?: string | null;
+      comentario?: string | null;
+      usuarioId?: string | null;
+      usuarioNombre?: string | null;
+    },
+  ): Promise<void> {
+    await this.prisma.seguimientoCotizacion.create({
+      data: {
+        cotizacionId,
+        tipo: data.tipo,
+        estadoAnterior: data.estadoAnterior ?? null,
+        estadoNuevo: data.estadoNuevo ?? null,
+        comentario: data.comentario?.trim() || null,
+        usuarioId: data.usuarioId ?? null,
+        usuarioNombre: data.usuarioNombre ?? null,
+      },
+    });
+  }
+
   async updateStatus(
     id: string,
     estado: QuoteStatus,
@@ -588,8 +735,20 @@ export class QuotesService {
         codigo: existing.codigo,
         estadoAnterior: existing.estado,
         estadoNuevo: estado,
+        comentario: meta?.comentario ?? null,
       },
     });
+
+    if (existing.estado !== estado || meta?.comentario?.trim()) {
+      await this.recordSeguimiento(id, {
+        tipo: 'cambio_estado',
+        estadoAnterior: existing.estado,
+        estadoNuevo: estado,
+        comentario: meta?.comentario ?? null,
+        usuarioId: meta?.usuarioId ?? null,
+        usuarioNombre: meta?.usuarioNombre ?? null,
+      });
+    }
 
     return this.toDto(row);
   }
@@ -628,6 +787,17 @@ export class QuotesService {
         vendedorId: vendedorId || null,
         vendedorNombre: vendedorNombre || null,
       },
+    });
+
+    await this.recordSeguimiento(id, {
+      tipo: asignar ? 'asignacion_vendedor' : 'desasignacion_vendedor',
+      estadoAnterior: existing.estado,
+      estadoNuevo: nuevoEstado,
+      comentario: asignar
+        ? `Vendedor asignado: ${vendedorNombre}`
+        : 'Vendedor desasignado',
+      usuarioId: meta?.usuarioId ?? null,
+      usuarioNombre: meta?.usuarioNombre ?? null,
     });
 
     return this.toDto(row);

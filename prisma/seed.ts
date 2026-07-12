@@ -14,6 +14,7 @@ async function main() {
     { slug: 'manage_users', name: 'Crear usuarios / Resetear contraseñas' },
     { slug: 'manage_policies', name: 'Gestionar políticas de compra' },
     { slug: 'manage_chatbot', name: 'Gestionar chatbot (FAQs y métricas)' },
+    { slug: 'view_own_quotes', name: 'Ver sus propias cotizaciones' },
   ];
 
   for (const p of perms) {
@@ -42,6 +43,20 @@ async function main() {
   await prisma.rolePermission.deleteMany({ where: { roleId: vendedor.id } });
   await prisma.rolePermission.create({
     data: { roleId: vendedor.id, permissionId: viewQuotes.id },
+  });
+
+  const viewOwnQuotes = allPerms.find((p) => p.slug === 'view_own_quotes')!;
+
+  // Cliente registrado: solo sus cotizaciones
+  let cliente = await prisma.role.findUnique({ where: { slug: 'cliente' } });
+  if (!cliente) {
+    cliente = await prisma.role.create({
+      data: { slug: 'cliente', name: 'Cliente' },
+    });
+  }
+  await prisma.rolePermission.deleteMany({ where: { roleId: cliente.id } });
+  await prisma.rolePermission.create({
+    data: { roleId: cliente.id, permissionId: viewOwnQuotes.id },
   });
 
   // Administrador: acceso a todo

@@ -202,13 +202,8 @@ export class MailService {
     const filasTexto = quote.items
       .map((it) => `• ${it.codigo} - ${it.nombre}\n  ${it.cantidad} x ${fmtQ(it.precioUnitario)} = ${fmtQ(it.subtotal)}`)
       .join('\n');
-    const neto = quote.neto ?? quote.total;
-    const ivaMonto = quote.ivaMonto ?? 0;
     const totalPagar = quote.totalConIva ?? quote.total;
-    const totalesTexto =
-      ivaMonto > 0
-        ? `Subtotal: ${fmtQ(neto)}\nIVA (${quote.ivaPorcentaje ?? 12}%): ${fmtQ(ivaMonto)}\nTotal: ${fmtQ(totalPagar)}`
-        : `Total: ${fmtQ(quote.total)}`;
+    const totalesTexto = `Total: ${fmtQ(totalPagar)}`;
     const text = `${saludo}\n\nGracias por tu interés en Ferromaderas. Aquí está tu cotización ${quote.codigo}:\n\n${filasTexto}\n\n${totalesTexto}\n\nPuedes consultarla en línea aquí:\n${publicUrl}\n\n— Ferromaderas`;
 
     const filasHtml = quote.items
@@ -241,9 +236,7 @@ export class MailService {
           </thead>
           <tbody>${filasHtml}</tbody>
         </table>
-        <p style="font-size:16px;margin:12px 0 4px;text-align:right;">Subtotal: ${fmtQ(neto)}</p>
-        ${ivaMonto > 0 ? `<p style="font-size:16px;margin:4px 0;text-align:right;">IVA (${quote.ivaPorcentaje ?? 12}%): ${fmtQ(ivaMonto)}</p>` : ''}
-        <p style="font-size:20px;margin:0 0 20px;text-align:right;"><strong>Total: ${fmtQ(totalPagar)}</strong></p>
+        <p style="font-size:20px;margin:12px 0 20px;text-align:right;"><strong>Total: ${fmtQ(totalPagar)}</strong></p>
         <p style="text-align:center;margin:28px 0;">
           <a href="${publicUrl}" style="background:#1e3a8a;color:white!important;padding:14px 28px;text-decoration:none;border-radius:8px;display:inline-block;font-weight:600;font-size:18px;">Ver cotización en línea</a>
         </p>

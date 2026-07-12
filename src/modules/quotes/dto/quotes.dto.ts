@@ -73,6 +73,11 @@ export class CreateQuoteDto {
 export class UpdateStatusDto {
   @IsIn(QUOTE_STATUSES as unknown as string[])
   estado!: QuoteStatus;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  comentario?: string;
 }
 
 export class AssignVendedorDto {

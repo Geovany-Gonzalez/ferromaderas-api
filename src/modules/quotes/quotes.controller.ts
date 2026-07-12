@@ -21,6 +21,7 @@ import {
   UpdateStatusDto,
 } from './dto/quotes.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { OptionalJwtAuthGuard } from '../auth/optional-jwt-auth.guard';
 import { PermissionsGuard } from '../auth/permissions.guard';
 import { RequirePermissions } from '../auth/permissions.decorator';
 import { CurrentUser } from '../auth/current-user.decorator';
@@ -32,9 +33,18 @@ export class QuotesController {
 
   /** Público: crea una cotización desde el carrito del sitio. */
   @Post()
-  create(@Body() body: CreateQuoteDto, @Req() req: Request) {
+  @UseGuards(OptionalJwtAuthGuard)
+  create(
+    @Body() body: CreateQuoteDto,
+    @Req() req: Request,
+    @CurrentUser() user?: UserPayload | null,
+  ) {
+    const clienteId = user?.role === 'cliente' ? user.sub : undefined;
     return this.quotes.create(body, {
       ip: req.ip ?? req.socket?.remoteAddress,
+      clienteRegistradoId: clienteId,
+      usuarioId: clienteId,
+      usuarioNombre: user?.username,
     });
   }
 
@@ -70,6 +80,29 @@ export class QuotesController {
     return this.quotes.getTopQuotedProducts(user);
   }
 
+  /** Cliente registrado: sus cotizaciones. */
+  @Get('mis-cotizaciones')
+  @UseGuards(JwtAuthGuard)
+  async misCotizaciones(@CurrentUser() user: UserPayload) {
+    if (user?.role !== 'cliente') {
+      throw new ForbiddenException('Solo clientes registrados pueden ver este listado.');
+    }
+    const profile = await this.quotes.getUserEmail(user.sub);
+    if (!profile) throw new NotFoundException('Usuario no encontrado');
+    return this.quotes.findMisCotizaciones(user.sub, profile.email);
+  }
+
+  /** Admin / cliente: historial de seguimiento de una cotización. */
+  @Get(':id/historial-seguimiento')
+  @UseGuards(JwtAuthGuard)
+  async historialSeguimiento(
+    @Param('id') id: string,
+    @CurrentUser() user: UserPayload,
+  ) {
+    await this.quotes.assertCanViewQuote(id, user);
+    return this.quotes.getSeguimientoHistorial(id);
+  }
+
   /** Admin: detalle con items. */
   @Get(':id')
   @UseGuards(JwtAuthGuard, PermissionsGuard)
@@ -92,7 +125,9 @@ export class QuotesController {
   ) {
     return this.quotes.updateStatus(id, body.estado, {
       usuarioId: user?.sub,
+      usuarioNombre: user?.username,
       ip: req.ip ?? req.socket?.remoteAddress,
+      comentario: body.comentario,
     });
   }
 
@@ -115,6 +150,7 @@ export class QuotesController {
       body.vendedorNombre ?? null,
       {
         usuarioId: user?.sub,
+        usuarioNombre: user?.username,
         ip: req.ip ?? req.socket?.remoteAddress,
       },
     );

@@ -16,12 +16,14 @@ import { JwtAuthGuard } from './jwt-auth.guard';
 import { CurrentUser } from './current-user.decorator';
 import type { UserPayload } from './auth.types';
 import { clearAuthCookie, setAuthCookie } from './auth-cookie';
+import { QuotesService } from '../quotes/quotes.service';
 
 @Controller('auth')
 export class AuthController {
   constructor(
     private readonly auth: AuthService,
     private readonly config: ConfigService,
+    private readonly quotes: QuotesService,
   ) {}
 
   @Post('login')
@@ -52,6 +54,21 @@ export class AuthController {
       }
       throw err;
     }
+  }
+
+  @Post('register-client')
+  async registerClient(
+    @Body() body: { email: string; password: string; name: string; phone?: string },
+    @Res({ passthrough: true }) res: Response,
+    @Req() req: Request,
+  ) {
+    const result = await this.auth.registerClient(body, req.ip ?? req.socket?.remoteAddress);
+    const linkedQuotes = await this.quotes.linkQuotesToCliente(
+      result.user.id,
+      result.user.email,
+    );
+    setAuthCookie(res, result.access_token, this.config);
+    return { user: result.user, linkedQuotes };
   }
 
   @Post('logout')

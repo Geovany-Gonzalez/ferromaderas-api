@@ -202,6 +202,57 @@ export class UsersService {
     };
   }
 
+  /** Registro público de cliente (sin correo de credenciales ni cambio forzado). */
+  async createClient(
+    data: {
+      email: string;
+      password: string;
+      name: string;
+      phone?: string;
+    },
+    meta?: AuditMeta,
+  ) {
+    const username = data.email.trim().toLowerCase();
+    const email = username;
+
+    const existing = await this.prisma.user.findFirst({
+      where: { OR: [{ username }, { email }] },
+    });
+    if (existing) {
+      throw new ConflictException('El correo ya está registrado.');
+    }
+
+    const role = await this.prisma.role.findUnique({ where: { slug: 'cliente' } });
+    if (!role) throw new NotFoundException('Rol cliente no configurado.');
+
+    const passwordHash = await bcrypt.hash(data.password, 10);
+    const user = await this.prisma.user.create({
+      data: {
+        username,
+        email,
+        passwordHash,
+        name: data.name.trim(),
+        phone: normalizePhone(data.phone),
+        roleId: role.id,
+        status: 'activo',
+        mustChangePassword: false,
+      },
+      include: {
+        role: { include: { permissions: { include: { permission: true } } } },
+      },
+    });
+
+    await this.bitacora.registrar({
+      modulo: 'auth',
+      accion: 'registro_cliente',
+      usuarioId: user.id,
+      detalles: { email: user.email },
+      ip: meta?.ip,
+    });
+
+    return user;
+  }
+
   async update(
     id: string,
     data: {
