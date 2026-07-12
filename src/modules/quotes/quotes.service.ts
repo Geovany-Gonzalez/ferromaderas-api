@@ -246,7 +246,50 @@ export class QuotesService {
         );
     }
 
+    // Aviso interno a Ferromaderas (copia al correo del negocio configurado en SMTP).
+    if (this.mail.isConfigured()) {
+      this.notifyInternalNewQuote(row).catch((e) =>
+        this.logger.warn(
+          `No se pudo enviar aviso interno de cotización ${row.codigo}: ${
+            e instanceof Error ? e.message : String(e)
+          }`,
+        ),
+      );
+    }
+
     return this.toDto(row);
+  }
+
+  /** Notifica al equipo interno que entró una cotización nueva desde el sitio público. */
+  private async notifyInternalNewQuote(row: CotizacionRow): Promise<void> {
+    const to =
+      this.config.get<string>('QUOTES_NOTIFY_EMAIL')?.trim() ||
+      this.config.get<string>('SMTP_USER')?.trim();
+    if (!to) return;
+
+    const frontendUrl =
+      this.config.get<string>('FRONTEND_URL') ?? 'http://localhost:4200';
+    const adminUrl = `${frontendUrl}/admin/cotizaciones`;
+    const fmtQ = (n: number) => `Q${n.toLocaleString('es-GT')}`;
+    const cliente = row.clienteNombre?.trim() || 'Sin nombre';
+    const telefono = row.clienteTelefono?.trim() || '—';
+    const email = row.clienteEmail?.trim() || '—';
+
+    const subject = `Nueva cotización ${row.codigo} - Ferromaderas`;
+    const text = [
+      `Entró una nueva cotización desde el sitio web.`,
+      ``,
+      `Código: ${row.codigo}`,
+      `Cliente: ${cliente}`,
+      `Teléfono: ${telefono}`,
+      `Correo: ${email}`,
+      `Total: ${fmtQ(Number(row.total))}`,
+      `Productos: ${row.items.length}`,
+      ``,
+      `Ver en el panel: ${adminUrl}`,
+    ].join('\n');
+
+    await this.mail.send(to, subject, text);
   }
 
   /** Arma y envía por SMTP el correo con el detalle de la cotización y su enlace público. */

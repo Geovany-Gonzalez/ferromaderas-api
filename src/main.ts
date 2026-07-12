@@ -5,6 +5,7 @@ import cookieParser from 'cookie-parser';
 import { AppModule } from './app.module';
 import { PrismaService } from './core/database/prisma.service';
 import { AllExceptionsFilter } from './core/filters/all-exceptions.filter';
+import { BitacoraService } from './modules/bitacora/bitacora.service';
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
@@ -32,7 +33,7 @@ async function bootstrap() {
     credentials: true,
   });
 
-  app.useGlobalFilters(new AllExceptionsFilter());
+  app.useGlobalFilters(new AllExceptionsFilter(app.get(BitacoraService)));
 
   app.setGlobalPrefix('api');
 

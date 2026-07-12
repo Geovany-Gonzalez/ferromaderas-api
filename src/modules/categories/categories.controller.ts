@@ -6,12 +6,16 @@ import {
   Delete,
   Body,
   Param,
+  Req,
   UseGuards,
 } from '@nestjs/common';
+import { Request } from 'express';
 import { CategoriesService } from './categories.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/permissions.guard';
 import { RequirePermissions } from '../auth/permissions.decorator';
+import { CurrentUser } from '../auth/current-user.decorator';
+import type { UserPayload } from '../auth/auth.types';
 
 @Controller('categories')
 export class CategoriesController {
@@ -44,9 +48,14 @@ export class CategoriesController {
       imageUrl?: string;
       description?: string;
       active?: boolean;
-    }
+    },
+    @CurrentUser() user: UserPayload,
+    @Req() req: Request,
   ) {
-    return this.categories.create(body);
+    return this.categories.create(body, {
+      usuarioId: user?.sub,
+      ip: req.ip ?? req.socket?.remoteAddress,
+    });
   }
 
   @Put(':id')
@@ -61,15 +70,27 @@ export class CategoriesController {
       imageUrl?: string | null;
       description?: string | null;
       active?: boolean;
-    }
+    },
+    @CurrentUser() user: UserPayload,
+    @Req() req: Request,
   ) {
-    return this.categories.update(id, body);
+    return this.categories.update(id, body, {
+      usuarioId: user?.sub,
+      ip: req.ip ?? req.socket?.remoteAddress,
+    });
   }
 
   @Delete(':id')
   @UseGuards(JwtAuthGuard, PermissionsGuard)
   @RequirePermissions('manage_categories')
-  delete(@Param('id') id: string) {
-    return this.categories.delete(id);
+  delete(
+    @Param('id') id: string,
+    @CurrentUser() user: UserPayload,
+    @Req() req: Request,
+  ) {
+    return this.categories.delete(id, {
+      usuarioId: user?.sub,
+      ip: req.ip ?? req.socket?.remoteAddress,
+    });
   }
 }

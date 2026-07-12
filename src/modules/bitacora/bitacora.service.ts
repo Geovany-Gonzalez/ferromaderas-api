@@ -16,6 +16,7 @@ export interface BitacoraListItemDto {
   modulo: string;
   accion: string;
   usuarioId: string | null;
+  usuarioNombre: string | null;
   detalles: Record<string, unknown> | null;
   ip: string | null;
 }
@@ -76,6 +77,20 @@ export class BitacoraService {
       }),
     ]);
 
+    // Resuelve el nombre de los usuarios para mostrar algo legible en vez del UUID.
+    const usuarioIds = [
+      ...new Set(rows.map((r) => r.usuarioId).filter((id): id is string => !!id)),
+    ];
+    const usuarios = usuarioIds.length
+      ? await this.prisma.user.findMany({
+          where: { id: { in: usuarioIds } },
+          select: { id: true, name: true, username: true },
+        })
+      : [];
+    const nombrePorId = new Map(
+      usuarios.map((u) => [u.id, u.name?.trim() || u.username]),
+    );
+
     return {
       items: rows.map((r) => ({
         id: r.id,
@@ -83,6 +98,9 @@ export class BitacoraService {
         modulo: r.modulo,
         accion: r.accion,
         usuarioId: r.usuarioId,
+        usuarioNombre: r.usuarioId
+          ? nombrePorId.get(r.usuarioId) ?? null
+          : null,
         detalles: (r.detalles as Record<string, unknown> | null) ?? null,
         ip: r.ip,
       })),

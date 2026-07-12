@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../core/database/prisma.service';
+import { BitacoraService } from '../bitacora/bitacora.service';
 
 export interface PolicySectionDto {
   id: string;
@@ -14,9 +15,18 @@ export interface PolicyPageDto {
   policies: PolicySectionDto[];
 }
 
+/** Usuario e IP para auditoría (panel admin). */
+export interface PolicyAuditMeta {
+  usuarioId?: string;
+  ip?: string;
+}
+
 @Injectable()
 export class PoliciesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly bitacora: BitacoraService,
+  ) {}
 
   /** Obtiene la página de políticas (pública, sin auth) */
   async getPage(): Promise<PolicyPageDto> {
@@ -53,7 +63,10 @@ export class PoliciesService {
   }
 
   /** Actualiza la página de políticas (requiere auth) */
-  async updatePage(dto: PolicyPageDto): Promise<PolicyPageDto> {
+  async updatePage(
+    dto: PolicyPageDto,
+    meta?: PolicyAuditMeta,
+  ): Promise<PolicyPageDto> {
     const POLICY_COUNT = 6;
     const policies = (dto.policies ?? []).slice(0, POLICY_COUNT);
 
@@ -96,6 +109,18 @@ export class PoliciesService {
       data: {
         title: dto.title ?? page.title,
         subtitle: dto.subtitle ?? page.subtitle,
+      },
+    });
+
+    await this.bitacora.registrar({
+      modulo: 'politicas',
+      accion: 'actualizar',
+      usuarioId: meta?.usuarioId,
+      ip: meta?.ip,
+      detalles: {
+        pageId: page.id,
+        titulo: dto.title ?? page.title,
+        secciones: Math.min(policies.length, POLICY_COUNT),
       },
     });
 

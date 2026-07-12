@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../core/database/prisma.service';
 import { Category as PrismaCategory } from '@prisma/client';
+import { BitacoraService } from '../bitacora/bitacora.service';
 
 export interface CategoryDto {
   id: string;
@@ -11,9 +12,18 @@ export interface CategoryDto {
   active: boolean;
 }
 
+/** Usuario e IP para auditoría (panel admin). */
+export interface CategoryAuditMeta {
+  usuarioId?: string;
+  ip?: string;
+}
+
 @Injectable()
 export class CategoriesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly bitacora: BitacoraService,
+  ) {}
 
   async findAll(): Promise<CategoryDto[]> {
     const list = await this.prisma.category.findMany({
@@ -36,13 +46,16 @@ export class CategoriesService {
     return c ? this.toDto(c) : null;
   }
 
-  async create(data: {
-    name: string;
-    slug: string;
-    imageUrl?: string;
-    description?: string;
-    active?: boolean;
-  }): Promise<CategoryDto> {
+  async create(
+    data: {
+      name: string;
+      slug: string;
+      imageUrl?: string;
+      description?: string;
+      active?: boolean;
+    },
+    meta?: CategoryAuditMeta,
+  ): Promise<CategoryDto> {
     const c = await this.prisma.category.create({
       data: {
         name: data.name.trim(),
@@ -52,6 +65,11 @@ export class CategoriesService {
         active: data.active ?? true,
       },
     });
+    await this.registrarAuditoria(
+      'crear',
+      { categoriaId: c.id, nombre: c.name, slug: c.slug, activa: c.active },
+      meta,
+    );
     return this.toDto(c);
   }
 
@@ -63,7 +81,8 @@ export class CategoriesService {
       imageUrl?: string | null;
       description?: string | null;
       active?: boolean;
-    }
+    },
+    meta?: CategoryAuditMeta,
   ): Promise<CategoryDto | null> {
     const existing = await this.prisma.category.findUnique({ where: { id } });
     if (!existing) return null;
@@ -83,14 +102,53 @@ export class CategoriesService {
         ...(data.active !== undefined && { active: data.active }),
       },
     });
+    const campos = Object.keys(data).filter(
+      (k) => data[k as keyof typeof data] !== undefined,
+    );
+    let accion = 'actualizar';
+    if (campos.length === 1 && campos[0] === 'active') {
+      accion = data.active ? 'activar' : 'desactivar';
+    }
+    await this.registrarAuditoria(
+      accion,
+      { categoriaId: c.id, nombre: c.name, slug: c.slug, campos },
+      meta,
+    );
     return this.toDto(c);
   }
 
-  async delete(id: string): Promise<boolean> {
+  async delete(id: string, meta?: CategoryAuditMeta): Promise<boolean> {
+    const existing = await this.prisma.category.findUnique({ where: { id } });
     const result = await this.prisma.category.deleteMany({
       where: { id },
     });
-    return result.count > 0;
+    const eliminada = result.count > 0;
+    if (eliminada) {
+      await this.registrarAuditoria(
+        'eliminar',
+        {
+          categoriaId: id,
+          nombre: existing?.name ?? null,
+          slug: existing?.slug ?? null,
+        },
+        meta,
+      );
+    }
+    return eliminada;
+  }
+
+  private async registrarAuditoria(
+    accion: string,
+    detalles: Record<string, unknown>,
+    meta?: CategoryAuditMeta,
+  ): Promise<void> {
+    await this.bitacora.registrar({
+      modulo: 'categorias',
+      accion,
+      usuarioId: meta?.usuarioId,
+      ip: meta?.ip,
+      detalles,
+    });
   }
 
   private normalizeOptionalText(

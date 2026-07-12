@@ -7,6 +7,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
+import { BitacoraService } from '../../modules/bitacora/bitacora.service';
 
 /**
  * Filtro global de excepciones.
@@ -16,10 +17,15 @@ import type { Request, Response } from 'express';
  * - Los errores no controlados (5xx) se registran con su traza para diagnóstico,
  *   pero al cliente solo se le devuelve un mensaje genérico para no exponer
  *   detalles internos del sistema.
+ *
+ * Además, los errores del servidor (5xx) se persisten en la bitácora (módulo
+ * `errores`) para que el administrador pueda consultarlos desde el panel.
  */
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter {
   private readonly logger = new Logger('ExceptionFilter');
+
+  constructor(private readonly bitacora: BitacoraService) {}
 
   catch(exception: unknown, host: ArgumentsHost): void {
     const ctx = host.switchToHttp();
@@ -42,6 +48,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
       const detail =
         exception instanceof Error ? exception.message : String(exception);
       this.logger.error(`${logContext} -> ${status} | ${detail}`, stack);
+      this.persistirError(request, status, detail, stack);
     } else {
       this.logger.warn(`${logContext} -> ${status} | ${clientMessage}`);
     }
@@ -51,6 +58,30 @@ export class AllExceptionsFilter implements ExceptionFilter {
       message: clientMessage,
       timestamp: new Date().toISOString(),
       path: request.originalUrl,
+    });
+  }
+
+  /** Guarda el error del servidor en la bitácora (sin bloquear la respuesta). */
+  private persistirError(
+    request: Request,
+    status: number,
+    detail: string,
+    stack?: string,
+  ): void {
+    const user = (request as Request & { user?: { sub?: string } }).user;
+    void this.bitacora.registrar({
+      modulo: 'errores',
+      accion: `${request.method} ${status}`,
+      usuarioId: user?.sub,
+      ip: request.ip ?? request.socket?.remoteAddress,
+      detalles: {
+        ruta: request.originalUrl,
+        metodo: request.method,
+        status,
+        mensaje: detail?.slice(0, 500),
+        // Traza recortada: suficiente para diagnóstico sin inflar la BD.
+        traza: stack?.split('\n').slice(0, 6).join('\n').slice(0, 2000),
+      },
     });
   }
 
