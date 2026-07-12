@@ -70,7 +70,15 @@ export interface QuoteDto {
   descuentoPorcentaje: number;
   descuentoMonto: number;
   descuentoMotivo?: string;
+  /** Monto neto gravable (subtotal menos descuento aplicado). */
+  neto: number;
+  /** IVA Guatemala (12%) sobre el neto. */
+  ivaPorcentaje: number;
+  ivaMonto: number;
+  /** Total sin IVA (igual al neto; se conserva por compatibilidad). */
   total: number;
+  /** Total a pagar incluyendo IVA. */
+  totalConIva: number;
   aprobacion: ApprovalState;
   aprobadoPorNombre?: string;
   aprobadoEn?: string;
@@ -87,7 +95,35 @@ export interface QuoteAuditMeta {
   ip?: string;
 }
 
+/** Tipos de alerta de seguimiento comercial mostrados en el panel admin. */
+export type FollowUpAlertType = 'nueva_sin_vendedor' | 'descuento_pendiente';
+
+export interface FollowUpAlertItem {
+  id: string;
+  codigo: string;
+  tipo: FollowUpAlertType;
+  prioridad: 'alta' | 'media';
+  mensaje: string;
+  clienteNombre?: string;
+  total: number;
+  createdAt: string;
+  diasSinAtender: number;
+}
+
+export interface FollowUpAlertsDto {
+  resumen: {
+    nuevasSinVendedor: number;
+    enSeguimiento: number;
+    descuentosPendientes: number;
+    totalPendientes: number;
+  };
+  alertas: FollowUpAlertItem[];
+}
+
 type CotizacionRow = Prisma.CotizacionGetPayload<{ include: { items: true } }>;
+
+/** IVA estándar en Guatemala. */
+export const IVA_PORCENTAJE = 12;
 
 @Injectable()
 export class QuotesService {
@@ -100,11 +136,28 @@ export class QuotesService {
     private readonly config: ConfigService,
   ) {}
 
+  private computeIva(neto: number): {
+    neto: number;
+    ivaPorcentaje: number;
+    ivaMonto: number;
+    totalConIva: number;
+  } {
+    const base = Math.max(0, neto);
+    const ivaMonto = Math.round(base * IVA_PORCENTAJE * 100) / 10000;
+    return {
+      neto: base,
+      ivaPorcentaje: IVA_PORCENTAJE,
+      ivaMonto,
+      totalConIva: Math.round((base + ivaMonto) * 100) / 100,
+    };
+  }
+
   private toDto(row: CotizacionRow, includeItems = true): QuoteDto {
     const total = Number(row.total);
     // Compatibilidad con cotizaciones previas a la función de descuentos:
     // si no hay subtotal registrado, se asume igual al total.
     const subtotal = Number(row.subtotal) || total;
+    const iva = this.computeIva(total);
     const dto: QuoteDto = {
       id: row.id,
       codigo: row.codigo,
@@ -118,7 +171,11 @@ export class QuotesService {
       descuentoPorcentaje: Number(row.descuentoPorcentaje),
       descuentoMonto: Number(row.descuentoMonto),
       descuentoMotivo: row.descuentoMotivo ?? undefined,
+      neto: iva.neto,
+      ivaPorcentaje: iva.ivaPorcentaje,
+      ivaMonto: iva.ivaMonto,
       total,
+      totalConIva: iva.totalConIva,
       aprobacion: (row.aprobacion as ApprovalState) ?? 'no_requiere',
       aprobadoPorNombre: row.aprobadoPorNombre ?? undefined,
       aprobadoEn: row.aprobadoEn ? row.aprobadoEn.toISOString() : undefined,
@@ -246,50 +303,203 @@ export class QuotesService {
         );
     }
 
-    // Aviso interno a Ferromaderas (copia al correo del negocio configurado en SMTP).
-    if (this.mail.isConfigured()) {
-      this.notifyInternalNewQuote(row).catch((e) =>
-        this.logger.warn(
-          `No se pudo enviar aviso interno de cotización ${row.codigo}: ${
-            e instanceof Error ? e.message : String(e)
-          }`,
-        ),
-      );
-    }
+    // Alerta de seguimiento al correo de la organización (SMTP).
+    this.dispatchFollowUpAlert(row, 'nueva_cotizacion', meta);
 
     return this.toDto(row);
   }
 
-  /** Notifica al equipo interno que entró una cotización nueva desde el sitio público. */
-  private async notifyInternalNewQuote(row: CotizacionRow): Promise<void> {
-    const to =
+  /** Correo de la organización para alertas internas de seguimiento. */
+  private getOrganizationEmail(): string | null {
+    return (
       this.config.get<string>('QUOTES_NOTIFY_EMAIL')?.trim() ||
-      this.config.get<string>('SMTP_USER')?.trim();
-    if (!to) return;
+      this.config.get<string>('SMTP_USER')?.trim() ||
+      null
+    );
+  }
+
+  /**
+   * Envía alerta de seguimiento al correo de Ferromaderas y la registra en bitácora.
+   * No bloquea la operación principal si el SMTP falla.
+   */
+  private dispatchFollowUpAlert(
+    row: CotizacionRow,
+    tipo: 'nueva_cotizacion' | 'descuento_pendiente',
+    meta?: QuoteAuditMeta,
+  ): void {
+    const to = this.getOrganizationEmail();
+    if (!to || !this.mail.isConfigured()) return;
 
     const frontendUrl =
       this.config.get<string>('FRONTEND_URL') ?? 'http://localhost:4200';
     const adminUrl = `${frontendUrl}/admin/cotizaciones`;
-    const fmtQ = (n: number) => `Q${n.toLocaleString('es-GT')}`;
-    const cliente = row.clienteNombre?.trim() || 'Sin nombre';
-    const telefono = row.clienteTelefono?.trim() || '—';
-    const email = row.clienteEmail?.trim() || '—';
 
-    const subject = `Nueva cotización ${row.codigo} - Ferromaderas`;
-    const text = [
-      `Entró una nueva cotización desde el sitio web.`,
-      ``,
-      `Código: ${row.codigo}`,
-      `Cliente: ${cliente}`,
-      `Teléfono: ${telefono}`,
-      `Correo: ${email}`,
-      `Total: ${fmtQ(Number(row.total))}`,
-      `Productos: ${row.items.length}`,
-      ``,
-      `Ver en el panel: ${adminUrl}`,
-    ].join('\n');
+    const mensajeAccion =
+      tipo === 'nueva_cotizacion'
+        ? 'Asigná un vendedor y contactá al cliente para dar seguimiento comercial.'
+        : 'Un gerente debe aprobar o rechazar el descuento solicitado.';
 
-    await this.mail.send(to, subject, text);
+    this.mail
+      .sendFollowUpAlert(
+        to,
+        {
+          tipo,
+          codigo: row.codigo,
+          clienteNombre: row.clienteNombre ?? undefined,
+          clienteTelefono: row.clienteTelefono ?? undefined,
+          clienteEmail: row.clienteEmail ?? undefined,
+          total: Number(row.total),
+          itemsCount: row.items?.length,
+          descuentoPorcentaje: Number(row.descuentoPorcentaje),
+          descuentoMotivo: row.descuentoMotivo ?? undefined,
+          mensajeAccion,
+        },
+        adminUrl,
+      )
+      .then(() =>
+        this.bitacora.registrar({
+          modulo: 'cotizaciones',
+          accion: 'alerta_seguimiento',
+          usuarioId: meta?.usuarioId,
+          ip: meta?.ip,
+          detalles: {
+            cotizacionId: row.id,
+            codigo: row.codigo,
+            tipo,
+            email: to,
+          },
+        }),
+      )
+      .catch((e) =>
+        this.logger.warn(
+          `No se pudo enviar alerta de seguimiento (${tipo}) de ${row.codigo}: ${
+            e instanceof Error ? e.message : String(e)
+          }`,
+        ),
+      );
+  }
+
+  /**
+   * Resumen de cotizaciones que requieren acción en el panel administrativo.
+   * Usado por el dashboard y el indicador del menú lateral.
+   */
+  async getFollowUpAlerts(actor?: { sub: string; role: string }): Promise<FollowUpAlertsDto> {
+    const where: Prisma.CotizacionWhereInput = {};
+    if (actor?.role === 'vendedor') {
+      where.vendedorId = actor.sub;
+    }
+    const rows = await this.prisma.cotizacion.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        codigo: true,
+        estado: true,
+        clienteNombre: true,
+        total: true,
+        vendedorId: true,
+        aprobacion: true,
+        descuentoPorcentaje: true,
+        createdAt: true,
+      },
+    });
+
+    const now = Date.now();
+    const alertas: FollowUpAlertItem[] = [];
+    let nuevasSinVendedor = 0;
+    let descuentosPendientes = 0;
+    let enSeguimiento = 0;
+
+    for (const row of rows) {
+      const diasSinAtender = Math.floor(
+        (now - row.createdAt.getTime()) / 86_400_000,
+      );
+
+      if (row.estado === 'en_seguimiento') {
+        enSeguimiento++;
+      }
+
+      if (row.estado === 'nueva' && !row.vendedorId && actor?.role !== 'vendedor') {
+        nuevasSinVendedor++;
+        alertas.push({
+          id: row.id,
+          codigo: row.codigo,
+          tipo: 'nueva_sin_vendedor',
+          prioridad: diasSinAtender >= 1 ? 'alta' : 'media',
+          mensaje:
+            diasSinAtender >= 1
+              ? `Sin vendedor asignado hace ${diasSinAtender} día(s)`
+              : 'Cotización nueva — asignar vendedor',
+          clienteNombre: row.clienteNombre ?? undefined,
+          total: Number(row.total),
+          createdAt: row.createdAt.toISOString(),
+          diasSinAtender,
+        });
+      }
+
+      if (row.aprobacion === 'pendiente') {
+        descuentosPendientes++;
+        alertas.push({
+          id: row.id,
+          codigo: row.codigo,
+          tipo: 'descuento_pendiente',
+          prioridad: 'alta',
+          mensaje: `Descuento del ${Number(row.descuentoPorcentaje)}% pendiente de aprobación`,
+          clienteNombre: row.clienteNombre ?? undefined,
+          total: Number(row.total),
+          createdAt: row.createdAt.toISOString(),
+          diasSinAtender,
+        });
+      }
+    }
+
+    alertas.sort((a, b) => {
+      if (a.prioridad !== b.prioridad) return a.prioridad === 'alta' ? -1 : 1;
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    });
+
+    return {
+      resumen: {
+        nuevasSinVendedor,
+        enSeguimiento,
+        descuentosPendientes,
+        totalPendientes: nuevasSinVendedor + descuentosPendientes,
+      },
+      alertas: alertas.slice(0, 20),
+    };
+  }
+
+  /** Productos más incluidos en cotizaciones (para reportes). */
+  async getTopQuotedProducts(
+    actor?: { sub: string; role: string },
+    limit = 10,
+  ): Promise<
+    { codigo: string; nombre: string; vecesCotizado: number; porcentaje: number }[]
+  > {
+    const cotizacionWhere: Prisma.CotizacionWhereInput = {};
+    if (actor?.role === 'vendedor') {
+      cotizacionWhere.vendedorId = actor.sub;
+    }
+    const grouped = await this.prisma.cotizacionItem.groupBy({
+      by: ['codigo', 'nombre'],
+      where:
+        Object.keys(cotizacionWhere).length > 0
+          ? { cotizacion: cotizacionWhere }
+          : undefined,
+      _count: { _all: true },
+      orderBy: { _count: { codigo: 'desc' } },
+      take: limit,
+    });
+    const totalLineas = grouped.reduce((sum, g) => sum + g._count._all, 0);
+    return grouped.map((g) => ({
+      codigo: g.codigo,
+      nombre: g.nombre,
+      vecesCotizado: g._count._all,
+      porcentaje:
+        totalLineas > 0
+          ? Math.round((g._count._all / totalLineas) * 1000) / 10
+          : 0,
+    }));
   }
 
   /** Arma y envía por SMTP el correo con el detalle de la cotización y su enlace público. */
@@ -305,6 +515,10 @@ export class QuotesService {
       {
         codigo: row.codigo,
         clienteNombre: row.clienteNombre ?? undefined,
+        neto: Number(row.total),
+        ivaPorcentaje: IVA_PORCENTAJE,
+        ivaMonto: this.computeIva(Number(row.total)).ivaMonto,
+        totalConIva: this.computeIva(Number(row.total)).totalConIva,
         total: Number(row.total),
         items: row.items.map((it) => ({
           codigo: it.codigo,
@@ -318,8 +532,13 @@ export class QuotesService {
     );
   }
 
-  async findAll(): Promise<QuoteDto[]> {
+  async findAll(actor?: { sub: string; role: string }): Promise<QuoteDto[]> {
+    const where: Prisma.CotizacionWhereInput = {};
+    if (actor?.role === 'vendedor') {
+      where.vendedorId = actor.sub;
+    }
     const rows = await this.prisma.cotizacion.findMany({
+      where,
       orderBy: { createdAt: 'desc' },
       include: { items: true },
     });
@@ -474,6 +693,10 @@ export class QuotesService {
         requiereAprobacion: porcentaje > 0,
       },
     });
+
+    if (porcentaje > 0) {
+      this.dispatchFollowUpAlert(row, 'descuento_pendiente', meta);
+    }
 
     return this.toDto(row);
   }

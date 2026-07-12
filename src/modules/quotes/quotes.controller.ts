@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  ForbiddenException,
   Get,
   NotFoundException,
   Param,
@@ -49,8 +50,24 @@ export class QuotesController {
   @Get()
   @UseGuards(JwtAuthGuard, PermissionsGuard)
   @RequirePermissions('view_quotes')
-  list() {
-    return this.quotes.findAll();
+  list(@CurrentUser() user: UserPayload) {
+    return this.quotes.findAll(user);
+  }
+
+  /** Admin: alertas de seguimiento comercial para el panel. */
+  @Get('seguimiento/alertas')
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermissions('view_quotes')
+  followUpAlerts(@CurrentUser() user: UserPayload) {
+    return this.quotes.getFollowUpAlerts(user);
+  }
+
+  /** Admin: productos más cotizados (reportes). */
+  @Get('reportes/productos-cotizados')
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermissions('view_quotes')
+  topQuotedProducts(@CurrentUser() user: UserPayload) {
+    return this.quotes.getTopQuotedProducts(user);
   }
 
   /** Admin: detalle con items. */
@@ -89,6 +106,9 @@ export class QuotesController {
     @CurrentUser() user: UserPayload,
     @Req() req: Request,
   ) {
+    if (user?.role === 'vendedor') {
+      throw new ForbiddenException('Los vendedores no pueden asignar cotizaciones.');
+    }
     return this.quotes.assignVendedor(
       id,
       body.vendedorId ?? null,

@@ -184,6 +184,10 @@ export class MailService {
     quote: {
       codigo: string;
       clienteNombre?: string;
+      neto?: number;
+      ivaPorcentaje?: number;
+      ivaMonto?: number;
+      totalConIva?: number;
       total: number;
       items: { codigo: string; nombre: string; cantidad: number; precioUnitario: number; subtotal: number }[];
     },
@@ -198,7 +202,14 @@ export class MailService {
     const filasTexto = quote.items
       .map((it) => `• ${it.codigo} - ${it.nombre}\n  ${it.cantidad} x ${fmtQ(it.precioUnitario)} = ${fmtQ(it.subtotal)}`)
       .join('\n');
-    const text = `${saludo}\n\nGracias por tu interés en Ferromaderas. Aquí está tu cotización ${quote.codigo}:\n\n${filasTexto}\n\nTotal: ${fmtQ(quote.total)}\n\nPuedes consultarla en línea aquí:\n${publicUrl}\n\n— Ferromaderas`;
+    const neto = quote.neto ?? quote.total;
+    const ivaMonto = quote.ivaMonto ?? 0;
+    const totalPagar = quote.totalConIva ?? quote.total;
+    const totalesTexto =
+      ivaMonto > 0
+        ? `Subtotal: ${fmtQ(neto)}\nIVA (${quote.ivaPorcentaje ?? 12}%): ${fmtQ(ivaMonto)}\nTotal: ${fmtQ(totalPagar)}`
+        : `Total: ${fmtQ(quote.total)}`;
+    const text = `${saludo}\n\nGracias por tu interés en Ferromaderas. Aquí está tu cotización ${quote.codigo}:\n\n${filasTexto}\n\n${totalesTexto}\n\nPuedes consultarla en línea aquí:\n${publicUrl}\n\n— Ferromaderas`;
 
     const filasHtml = quote.items
       .map(
@@ -230,11 +241,95 @@ export class MailService {
           </thead>
           <tbody>${filasHtml}</tbody>
         </table>
-        <p style="font-size:20px;margin:0 0 20px;text-align:right;"><strong>Total: ${fmtQ(quote.total)}</strong></p>
+        <p style="font-size:16px;margin:12px 0 4px;text-align:right;">Subtotal: ${fmtQ(neto)}</p>
+        ${ivaMonto > 0 ? `<p style="font-size:16px;margin:4px 0;text-align:right;">IVA (${quote.ivaPorcentaje ?? 12}%): ${fmtQ(ivaMonto)}</p>` : ''}
+        <p style="font-size:20px;margin:0 0 20px;text-align:right;"><strong>Total: ${fmtQ(totalPagar)}</strong></p>
         <p style="text-align:center;margin:28px 0;">
           <a href="${publicUrl}" style="background:#1e3a8a;color:white!important;padding:14px 28px;text-decoration:none;border-radius:8px;display:inline-block;font-weight:600;font-size:18px;">Ver cotización en línea</a>
         </p>
         <p style="color:#64748b;font-size:15px;margin:16px 0 0;">Los precios pueden variar según disponibilidad. Un asesor te contactará para finalizar tu pedido.</p>
+      `,
+      hasLogo,
+    );
+    return this.send(to, subject, text, html, this.getLogoAttachments());
+  }
+
+  /**
+   * Alerta interna de seguimiento comercial para el equipo de Ferromaderas.
+   * Se envía al correo de la organización (SMTP_USER / QUOTES_NOTIFY_EMAIL).
+   */
+  async sendFollowUpAlert(
+    to: string,
+    alert: {
+      tipo: 'nueva_cotizacion' | 'descuento_pendiente';
+      codigo: string;
+      clienteNombre?: string;
+      clienteTelefono?: string;
+      clienteEmail?: string;
+      total: number;
+      itemsCount?: number;
+      descuentoPorcentaje?: number;
+      descuentoMotivo?: string;
+      mensajeAccion: string;
+    },
+    adminUrl: string,
+  ): Promise<boolean> {
+    const fmtQ = (n: number) => `Q${n.toLocaleString('es-GT')}`;
+    const esNueva = alert.tipo === 'nueva_cotizacion';
+    const subject = esNueva
+      ? `[Seguimiento] Nueva cotización ${alert.codigo}`
+      : `[Seguimiento] Descuento pendiente — ${alert.codigo}`;
+
+    const titulo = esNueva
+      ? 'Nueva cotización para dar seguimiento'
+      : 'Descuento pendiente de aprobación';
+
+    const cliente = alert.clienteNombre?.trim() || 'Sin nombre';
+    const telefono = alert.clienteTelefono?.trim() || '—';
+    const email = alert.clienteEmail?.trim() || '—';
+
+    const lineasTexto = [
+      titulo,
+      '',
+      `Cotización: ${alert.codigo}`,
+      `Cliente: ${cliente}`,
+      `Teléfono: ${telefono}`,
+      `Correo: ${email}`,
+      `Total: ${fmtQ(alert.total)}`,
+    ];
+    if (esNueva && alert.itemsCount != null) {
+      lineasTexto.push(`Productos: ${alert.itemsCount}`);
+    }
+    if (!esNueva && alert.descuentoPorcentaje != null) {
+      lineasTexto.push(`Descuento solicitado: ${alert.descuentoPorcentaje}%`);
+      if (alert.descuentoMotivo) lineasTexto.push(`Motivo: ${alert.descuentoMotivo}`);
+    }
+    lineasTexto.push('', alert.mensajeAccion, '', `Abrir panel: ${adminUrl}`);
+    const text = lineasTexto.join('\n');
+
+    const detalleExtra = esNueva
+      ? `<p style="font-size:17px;margin:0 0 12px;"><strong>Productos:</strong> ${alert.itemsCount ?? '—'}</p>`
+      : `<p style="font-size:17px;margin:0 0 8px;"><strong>Descuento solicitado:</strong> ${alert.descuentoPorcentaje}%</p>
+         ${alert.descuentoMotivo ? `<p style="font-size:16px;margin:0 0 12px;color:#64748b;"><strong>Motivo:</strong> ${alert.descuentoMotivo}</p>` : ''}`;
+
+    const hasLogo = !!this.logoPath;
+    const html = this.emailTemplate(
+      `<p style="font-size:20px;margin:0 0 12px;font-weight:600;color:#1e3a8a;">${titulo}</p>
+       <p style="font-size:17px;margin:0 0 16px;">Cotización <strong>${alert.codigo}</strong></p>`,
+      `
+        <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 16px;font-size:16px;">
+          <tr><td style="padding:6px 0;color:#64748b;width:120px;">Cliente</td><td style="padding:6px 0;"><strong>${cliente}</strong></td></tr>
+          <tr><td style="padding:6px 0;color:#64748b;">Teléfono</td><td style="padding:6px 0;">${telefono}</td></tr>
+          <tr><td style="padding:6px 0;color:#64748b;">Correo</td><td style="padding:6px 0;">${email}</td></tr>
+          <tr><td style="padding:6px 0;color:#64748b;">Total</td><td style="padding:6px 0;"><strong>${fmtQ(alert.total)}</strong></td></tr>
+        </table>
+        ${detalleExtra}
+        <p style="background:#fef3c7;border-left:4px solid #f59e0b;padding:12px 14px;border-radius:6px;font-size:16px;margin:16px 0;">
+          ${alert.mensajeAccion}
+        </p>
+        <p style="text-align:center;margin:24px 0 8px;">
+          <a href="${adminUrl}" style="background:#1e3a8a;color:white!important;padding:14px 28px;text-decoration:none;border-radius:8px;display:inline-block;font-weight:600;font-size:17px;">Ver en el panel administrativo</a>
+        </p>
       `,
       hasLogo,
     );
