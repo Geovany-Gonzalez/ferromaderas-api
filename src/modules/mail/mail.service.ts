@@ -331,23 +331,29 @@ export class MailService {
 
   async sendPasswordReset(
     to: string,
-    username: string,
+    displayName: string,
     tempPassword: string,
     changePasswordUrl: string,
+    forClient = false,
   ): Promise<boolean> {
-    const subject = 'Recuperación de contraseña - Ferromaderas Admin';
-    const text = `Hola ${username},\n\nSe ha generado una contraseña temporal para tu cuenta.\n\nContraseña temporal: ${tempPassword}\n\nDebes cambiarla antes de iniciar sesión. Haz clic en el enlace:\n${changePasswordUrl}\n\nEste enlace es válido por 24 horas.\n\n— Ferromaderas`;
+    const subject = forClient
+      ? 'Recuperación de contraseña - Ferromaderas'
+      : 'Recuperación de contraseña - Ferromaderas Admin';
+    const intro = forClient
+      ? 'Recibimos una solicitud para restablecer la contraseña de tu cuenta de cliente.'
+      : 'Se ha generado una contraseña temporal para tu cuenta.';
+    const text = `Hola ${displayName},\n\n${intro}\n\nContraseña temporal: ${tempPassword}\n\nDebes cambiarla antes de iniciar sesión. Haz clic en el enlace:\n${changePasswordUrl}\n\nEste enlace es válido por 24 horas.\n\n— Ferromaderas`;
     const hasLogo = !!this.logoPath;
     const html = this.emailTemplate(
-      `<p style="font-size:20px;margin:0 0 16px;">Hola <strong>${username}</strong>,</p>`,
+      `<p style="font-size:20px;margin:0 0 16px;">Hola <strong>${displayName}</strong>,</p>`,
       `
-        <p style="font-size:18px;margin:0 0 16px;">Se ha generado una contraseña temporal para tu cuenta.</p>
+        <p style="font-size:18px;margin:0 0 16px;">${intro}</p>
         <p style="font-size:18px;margin:0 0 16px;"><strong>Contraseña temporal:</strong> <code style="background:#f1f5f9;padding:8px 12px;border-radius:6px;font-size:18px;">${tempPassword}</code></p>
         <p style="font-size:18px;margin:0 0 20px;">Debes cambiarla antes de poder iniciar sesión. Haz clic en el botón:</p>
         <p style="text-align:center;margin:28px 0;">
           <a href="${changePasswordUrl}" style="background:#1e3a8a;color:white!important;padding:14px 28px;text-decoration:none;border-radius:8px;display:inline-block;font-weight:600;font-size:18px;">Cambiar contraseña</a>
         </p>
-        <p style="color:#64748b;font-size:16px;margin:16px 0 0;"><strong>Importante:</strong> Este enlace es válido por 24 horas. Si expira, solicita uno nuevo.</p>
+        <p style="color:#64748b;font-size:16px;margin:16px 0 0;"><strong>Importante:</strong> Este enlace es válido por 24 horas. Si expira, solicita uno nuevo desde Mis cotizaciones.</p>
         <p style="color:#64748b;font-size:16px;margin:24px 0 0;">Si no solicitaste este cambio, ignora este correo.</p>
       `,
       hasLogo,

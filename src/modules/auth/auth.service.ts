@@ -86,7 +86,10 @@ export class AuthService {
       { expiresIn: '1d' },
     );
     const frontendUrl = this.config.get<string>('FRONTEND_URL') ?? 'http://localhost:4200';
-    const changePasswordUrl = `${frontendUrl}/cambiar-password?token=${encodeURIComponent(token)}`;
+    const isClient = user.role.slug === 'cliente';
+    const fromParam = isClient ? '&from=cliente' : '';
+    const changePasswordUrl = `${frontendUrl}/cambiar-password?token=${encodeURIComponent(token)}${fromParam}`;
+    const displayName = user.name?.trim() || user.username;
 
     if (!this.mail.isConfigured()) {
       return { message: msg };
@@ -94,7 +97,7 @@ export class AuthService {
 
     // Envío en segundo plano para no bloquear la respuesta
     this.mail
-      .sendPasswordReset(user.email, user.username, tempPassword, changePasswordUrl)
+      .sendPasswordReset(user.email, displayName, tempPassword, changePasswordUrl, isClient)
       .catch((err: unknown) =>
         this.logger.warn(
           `Fallo al enviar correo de recuperación: ${err instanceof Error ? err.message : 'error desconocido'}`,
