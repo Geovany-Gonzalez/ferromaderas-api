@@ -1,4 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import type {
   IAnalyticsProvider,
   AnalyticsSummary,
@@ -16,6 +17,8 @@ export interface DashboardStatsDto {
   visitasPorDia: { date: string; visits: number }[];
   dispositivos: DeviceBreakdown[];
   traficoMensual: { month: string; visits: number }[];
+  /** 'ga4' si GA4_PROPERTY_ID está configurado; 'mock' si son datos de demostración. */
+  dataSource: 'ga4' | 'mock';
 }
 
 /**
@@ -28,6 +31,7 @@ export class StatisticsService {
   constructor(
     @Inject(ANALYTICS_PROVIDER)
     private readonly analyticsProvider: IAnalyticsProvider,
+    private readonly config: ConfigService,
   ) {}
 
   async getDashboardStats(): Promise<DashboardStatsDto> {
@@ -39,12 +43,15 @@ export class StatisticsService {
       this.analyticsProvider.getMonthlyTraffic(12),
     ]);
 
+    const ga4Configured = !!this.config.get<string>('GA4_PROPERTY_ID')?.trim();
+
     return {
       ...summary,
       paginasMasVisitadas: topPages,
       visitasPorDia: visitsByDay,
       dispositivos: devices,
       traficoMensual: monthly,
+      dataSource: ga4Configured ? 'ga4' : 'mock',
     };
   }
 

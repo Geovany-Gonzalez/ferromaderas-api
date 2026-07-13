@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../core/database/prisma.service';
 import { BitacoraService } from '../bitacora/bitacora.service';
 import { Decimal } from '@prisma/client/runtime/library';
@@ -105,6 +105,21 @@ export class ProductsService {
       where: { code: { equals: code, mode: 'insensitive' } },
     });
     return p ? this.toDto(p) : null;
+  }
+
+  /** Público: producto activo por UUID o código. */
+  async findActiveCatalogProduct(idOrCode: string): Promise<ProductDto> {
+    const byId = await this.prisma.product.findFirst({
+      where: { id: idOrCode, active: true },
+    });
+    if (byId) return this.toDto(byId);
+
+    const byCode = await this.prisma.product.findFirst({
+      where: { code: { equals: idOrCode, mode: 'insensitive' }, active: true },
+    });
+    if (byCode) return this.toDto(byCode);
+
+    throw new NotFoundException('Producto no encontrado o no disponible.');
   }
 
   private async registrarAuditoriaProducto(

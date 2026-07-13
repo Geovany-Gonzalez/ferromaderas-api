@@ -11,6 +11,7 @@ import { QuotesModule } from './modules/quotes/quotes.module';
 import { CategoriesModule } from './modules/categories/categories.module';
 import { BitacoraModule } from './modules/bitacora/bitacora.module';
 import { ChatbotModule } from './modules/chatbot/chatbot.module';
+import { RecommendationAgentModule } from './modules/recommendation-agent/recommendation-agent.module';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { ChatbotModule } from './modules/chatbot/chatbot.module';
     CategoriesModule,
     BitacoraModule,
     ChatbotModule,
+    RecommendationAgentModule,
   ],
 })
 export class AppModule {}
