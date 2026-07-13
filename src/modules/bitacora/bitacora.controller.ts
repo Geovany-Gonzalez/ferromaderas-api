@@ -15,6 +15,7 @@ export class BitacoraController {
     @Query('page') page?: string,
     @Query('pageSize') pageSize?: string,
     @Query('modulo') modulo?: string,
+    @Query('modulos') modulos?: string,
     @Query('desde') desde?: string,
     @Query('hasta') hasta?: string
   ) {
@@ -22,6 +23,7 @@ export class BitacoraController {
       page: page ? parseInt(page, 10) : undefined,
       pageSize: pageSize ? parseInt(pageSize, 10) : undefined,
       modulo,
+      modulos,
       desde,
       hasta,
     });

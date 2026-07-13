@@ -31,7 +31,10 @@ export interface BitacoraListResultDto {
 export interface BitacoraListQueryDto {
   page?: number;
   pageSize?: number;
+  /** Búsqueda parcial (texto libre). */
   modulo?: string;
+  /** Lista exacta de módulos separados por coma (filtro por checkboxes). */
+  modulos?: string;
   desde?: string;
   hasta?: string;
 }
@@ -47,10 +50,19 @@ export class BitacoraService {
     const pageSize = Math.min(100, Math.max(1, params.pageSize ?? 25));
     const skip = (page - 1) * pageSize;
 
+    const modulosList = (params.modulos ?? '')
+      .split(',')
+      .map((m) => m.trim())
+      .filter(Boolean);
+
     const where: Prisma.BitacoraWhereInput = {
-      ...(params.modulo?.trim() && {
-        modulo: { contains: params.modulo.trim(), mode: 'insensitive' },
-      }),
+      ...(modulosList.length > 0
+        ? { modulo: { in: modulosList } }
+        : params.modulo?.trim()
+          ? {
+              modulo: { contains: params.modulo.trim(), mode: 'insensitive' },
+            }
+          : {}),
       ...(params.desde || params.hasta
         ? {
             fecha: {
