@@ -346,6 +346,32 @@ export class UsersService {
     });
   }
 
+  /** Matriz RBAC para el panel de seguridad (roles internos + permisos reales de BD). */
+  async getRolePermissionMatrix() {
+    const [roles, permissions] = await Promise.all([
+      this.prisma.role.findMany({
+        where: { slug: { not: 'cliente' } },
+        include: {
+          permissions: { include: { permission: true } },
+        },
+        orderBy: { name: 'asc' },
+      }),
+      this.prisma.permission.findMany({ orderBy: { name: 'asc' } }),
+    ]);
+
+    return {
+      permissions: permissions.map((p) => ({
+        slug: p.slug,
+        name: p.name,
+      })),
+      roles: roles.map((r) => ({
+        slug: r.slug,
+        name: r.name,
+        permissions: r.permissions.map((rp) => rp.permission.slug),
+      })),
+    };
+  }
+
   /** Usuarios activos con rol vendedor, para asignarlos a cotizaciones. */
   async listVendedores() {
     const users = await this.prisma.user.findMany({

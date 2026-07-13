@@ -1,4 +1,4 @@
-import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
+import { Injectable, Logger, UnauthorizedException, ForbiddenException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
@@ -202,6 +202,109 @@ export class AuthService {
         role: user.role.slug,
         permissions: payload.permissions,
       },
+    };
+  }
+
+  /** Resumen de seguridad para el panel admin (alcance punto 15 / matriz #8). */
+  async getSecurityOverview(
+    user: UserPayload,
+    opts: { protocol?: string; host?: string },
+  ) {
+    if (user.role === 'cliente') {
+      throw new ForbiddenException('Acceso restringido al personal autorizado.');
+    }
+
+    const matrix = await this.users.getRolePermissionMatrix();
+    const isHttps = opts.protocol === 'https';
+    const isProd = this.config.get<string>('NODE_ENV') === 'production';
+
+    return {
+      sesion: {
+        usuario: user.username,
+        rol: user.role,
+        permisos: user.permissions,
+        permisosCount: user.permissions.length,
+      },
+      matriz: matrix,
+      controles: [
+        {
+          id: 'auth',
+          titulo: 'Autenticación de usuarios',
+          descripcion:
+            'Login con credenciales validadas en el servidor. Sesión mediante JWT en cookie HttpOnly (no accesible desde JavaScript).',
+          estado: 'activo',
+          detalle: 'Cookie HttpOnly + endpoint /api/auth/me',
+        },
+        {
+          id: 'rbac',
+          titulo: 'Control de acceso por roles y permisos',
+          descripcion:
+            'RBAC: cada rol tiene permisos granulares. El menú admin y la API validan permisos en cada operación.',
+          estado: 'activo',
+          detalle: `${matrix.roles.length} roles internos · ${matrix.permissions.length} permisos`,
+        },
+        {
+          id: 'bcrypt',
+          titulo: 'Cifrado de contraseñas',
+          descripcion:
+            'Las contraseñas se almacenan con bcrypt (hash irreversible). Nunca se guardan en texto plano ni en el navegador.',
+          estado: 'activo',
+          detalle: 'bcrypt cost factor 10',
+        },
+        {
+          id: 'validation',
+          titulo: 'Validación de entradas',
+          descripcion:
+            'DTOs con class-validator en la API y validación en formularios del frontend antes de enviar datos.',
+          estado: 'activo',
+          detalle: 'ValidationPipe global en NestJS',
+        },
+        {
+          id: 'guards',
+          titulo: 'Protección de rutas administrativas',
+          descripcion:
+            'Rutas /admin protegidas con authGuard. Endpoints sensibles exigen JwtAuthGuard + PermissionsGuard.',
+          estado: 'activo',
+          detalle: 'Guards en Angular y NestJS',
+        },
+        {
+          id: 'bitacora',
+          titulo: 'Trazabilidad y auditoría',
+          descripcion:
+            'Bitácora registra logins, cambios críticos y alertas. Consultable en Admin → Bitácora.',
+          estado: 'activo',
+          detalle: 'Módulo bitácora + tabla bitacora',
+        },
+        {
+          id: 'apikey',
+          titulo: 'API Key para sincronización de inventario',
+          descripcion:
+            'El endpoint bulk-sync de productos exige header X-API-Key; no usa credenciales de usuario.',
+          estado: 'activo',
+          detalle: 'INVENTORY_SYNC_API_KEY en servidor',
+        },
+        {
+          id: 'https',
+          titulo: 'Conexión segura HTTPS',
+          descripcion:
+            'En producción el sitio y la API deben servirse por HTTPS para cifrar datos en tránsito.',
+          estado: isHttps ? 'activo' : isProd ? 'pendiente' : 'desarrollo',
+          detalle: isHttps
+            ? `Conexión actual: ${opts.protocol}://${opts.host ?? 'servidor'}`
+            : 'En localhost se usa HTTP; activar HTTPS al desplegar',
+        },
+      ],
+      rutasProtegidas: [
+        { ruta: '/admin/*', guard: 'authGuard + rol interno', permiso: 'Sesión válida' },
+        { ruta: '/admin/productos', guard: 'permissionGuard', permiso: 'manage_products' },
+        { ruta: '/admin/categorias', guard: 'permissionGuard', permiso: 'manage_categories' },
+        { ruta: '/admin/cotizaciones', guard: 'permissionGuard', permiso: 'view_quotes' },
+        { ruta: '/admin/bitacora', guard: 'permissionGuard', permiso: 'view_bitacora' },
+        { ruta: '/admin/usuarios', guard: 'permissionGuard', permiso: 'manage_users' },
+        { ruta: '/admin/chatbot', guard: 'permissionGuard', permiso: 'manage_chatbot' },
+        { ruta: '/mis-cotizaciones', guard: 'rol cliente', permiso: 'view_own_quotes' },
+      ],
+      generadoEn: new Date().toISOString(),
     };
   }
 }

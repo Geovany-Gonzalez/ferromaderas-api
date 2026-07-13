@@ -100,4 +100,14 @@ export class AuthController {
     if (!user) return { user: null };
     return { user };
   }
+
+  /** Panel de seguridad visible (alcance punto 15). Solo personal interno autenticado. */
+  @Get('security-overview')
+  @UseGuards(JwtAuthGuard)
+  async securityOverview(@CurrentUser() payload: UserPayload, @Req() req: Request) {
+    return this.auth.getSecurityOverview(payload, {
+      protocol: req.protocol,
+      host: req.get('host') ?? undefined,
+    });
+  }
 }
