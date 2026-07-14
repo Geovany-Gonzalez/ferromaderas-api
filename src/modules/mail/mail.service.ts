@@ -329,6 +329,71 @@ export class MailService {
     return this.send(to, subject, text, html, this.getLogoAttachments());
   }
 
+  /** Notifica al cliente cuando cambia el estado de su cotización. */
+  async sendQuoteStatusUpdate(
+    to: string,
+    update: {
+      codigo: string;
+      clienteNombre?: string;
+      estadoAnterior: string;
+      estadoNuevo: string;
+      comentario?: string;
+    },
+    publicUrl: string,
+  ): Promise<boolean> {
+    const labels: Record<string, string> = {
+      nueva: 'Nueva',
+      en_seguimiento: 'En seguimiento',
+      confirmada: 'Confirmada',
+      cerrada: 'Cerrada',
+      cancelada: 'Cancelada',
+    };
+    const estadoLabel = labels[update.estadoNuevo] ?? update.estadoNuevo;
+    const subject = `Actualización de tu cotización ${update.codigo} — ${estadoLabel}`;
+    const saludo = update.clienteNombre?.trim()
+      ? `Hola ${update.clienteNombre.trim()},`
+      : 'Hola,';
+    const comentario = update.comentario?.trim();
+    const text = [
+      saludo,
+      '',
+      `Tu cotización ${update.codigo} cambió de estado a: ${estadoLabel}.`,
+      comentario ? `Comentario del equipo: ${comentario}` : '',
+      '',
+      `Consultala en línea: ${publicUrl}`,
+      '',
+      '— Ferromaderas',
+    ]
+      .filter(Boolean)
+      .join('\n');
+
+    const hasLogo = !!this.logoPath;
+    const html = this.emailTemplate(
+      `<p style="font-size:20px;margin:0 0 16px;">${saludo}</p>
+       <p style="font-size:18px;margin:0 0 16px;">Tu cotización <strong>${update.codigo}</strong> fue actualizada.</p>`,
+      `
+        <p style="font-size:18px;margin:0 0 12px;">
+          <strong>Estado actual:</strong>
+          <span style="background:#e0e7ff;color:#3730a3;padding:6px 12px;border-radius:6px;font-weight:600;">
+            ${estadoLabel}
+          </span>
+        </p>
+        ${
+          comentario
+            ? `<p style="background:#f8fafc;border-left:4px solid #1e3a8a;padding:12px 14px;border-radius:6px;font-size:16px;margin:16px 0;">
+                 <strong>Comentario:</strong> ${comentario}
+               </p>`
+            : ''
+        }
+        <p style="text-align:center;margin:28px 0;">
+          <a href="${publicUrl}" style="background:#1e3a8a;color:white!important;padding:14px 28px;text-decoration:none;border-radius:8px;display:inline-block;font-weight:600;font-size:18px;">Ver cotización</a>
+        </p>
+      `,
+      hasLogo,
+    );
+    return this.send(to, subject, text, html, this.getLogoAttachments());
+  }
+
   async sendPasswordReset(
     to: string,
     displayName: string,

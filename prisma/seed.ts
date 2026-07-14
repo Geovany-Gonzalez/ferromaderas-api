@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
+import { seedDemoCotizaciones } from './seed-demo-cotizaciones';
 
 const prisma = new PrismaClient();
 
@@ -214,7 +215,9 @@ async function main() {
     }
   }
 
-  console.log('Seed completado (roles, permisos, usuario admin, políticas y FAQs del chatbot).');
+  await seedDemoCotizaciones(prisma);
+
+  console.log('Seed completado (roles, permisos, usuario admin, políticas, FAQs y demo cotizaciones).');
 }
 
 main()

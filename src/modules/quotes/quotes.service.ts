@@ -564,6 +564,62 @@ export class QuotesService {
     );
   }
 
+  /** Notifica al cliente por correo cuando cambia el estado de seguimiento. */
+  private dispatchStatusEmail(
+    row: CotizacionRow,
+    estadoAnterior: string,
+    estadoNuevo: string,
+    comentario?: string | null,
+  ): void {
+    const notifyStates = new Set([
+      'en_seguimiento',
+      'confirmada',
+      'cerrada',
+      'cancelada',
+    ]);
+    if (!notifyStates.has(estadoNuevo)) return;
+
+    const email = row.clienteEmail?.trim();
+    if (!email || !this.mail.isConfigured()) return;
+
+    const frontendUrl =
+      this.config.get<string>('FRONTEND_URL') ?? 'http://localhost:4200';
+    const publicUrl = `${frontendUrl}/carrito?code=${encodeURIComponent(row.codigo)}`;
+
+    this.mail
+      .sendQuoteStatusUpdate(
+        email,
+        {
+          codigo: row.codigo,
+          clienteNombre: row.clienteNombre ?? undefined,
+          estadoAnterior,
+          estadoNuevo,
+          comentario: comentario ?? undefined,
+        },
+        publicUrl,
+      )
+      .then(() =>
+        this.bitacora.registrar({
+          modulo: 'cotizaciones',
+          accion: 'notificar_estado',
+          detalles: {
+            cotizacionId: row.id,
+            codigo: row.codigo,
+            email,
+            estadoAnterior,
+            estadoNuevo,
+          },
+        }),
+      )
+      .catch((e) =>
+        this.logger.warn(
+          `No se pudo notificar cambio de estado de ${row.codigo}: ${
+            e instanceof Error ? e.message : String(e)
+          }`,
+        ),
+      );
+  }
+
   async findAll(actor?: { sub: string; role: string }): Promise<QuoteDto[]> {
     const where: Prisma.CotizacionWhereInput = {};
     if (actor?.role === 'vendedor') {
@@ -750,6 +806,10 @@ export class QuotesService {
       });
     }
 
+    if (existing.estado !== estado) {
+      this.dispatchStatusEmail(row, existing.estado, estado, meta?.comentario);
+    }
+
     return this.toDto(row);
   }
 
@@ -799,6 +859,15 @@ export class QuotesService {
       usuarioId: meta?.usuarioId ?? null,
       usuarioNombre: meta?.usuarioNombre ?? null,
     });
+
+    if (existing.estado !== nuevoEstado) {
+      this.dispatchStatusEmail(
+        row,
+        existing.estado,
+        nuevoEstado,
+        asignar ? `Un vendedor fue asignado a tu cotización (${vendedorNombre}).` : undefined,
+      );
+    }
 
     return this.toDto(row);
   }

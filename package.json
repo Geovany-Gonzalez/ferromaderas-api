@@ -19,6 +19,7 @@
     "prisma:migrate:prod": "prisma migrate deploy",
     "prisma:studio": "prisma studio",
     "prisma:seed": "prisma db seed",
+    "seed:demo-quotes": "npx ts-node scripts/seed-demo-cotizaciones.ts",
     "reset-admin-password": "npx ts-node scripts/reset-admin-password.ts"
   },
   "dependencies": {
