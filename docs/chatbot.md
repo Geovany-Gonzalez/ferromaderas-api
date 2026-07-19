@@ -1,9 +1,31 @@
 # Chatbot de Ferromaderas — Cómo funciona
 
 Asistente del sitio público que responde con **preguntas prelistadas (FAQs)** y,
-cuando hace falta, con **IA (OpenAI)** usando únicamente información pública del
+de forma **opcional**, con IA (OpenAI) usando únicamente información pública del
 sistema. Está integrado a la arquitectura existente (Angular + NestJS +
-Prisma/PostgreSQL), sin depender de una plataforma de chatbot externa.
+Prisma/PostgreSQL), sin depender de una plataforma de chatbot externa contratada
+por volumen de mensajes.
+
+---
+
+## Alineación con la limitación de IA del PG
+
+El documento distingue dos capacidades de inteligencia:
+
+| Componente | Motor | ¿API de pago obligatoria? |
+|---|---|---|
+| **Agente de recomendaciones** (punto 13) | Propio (híbrido sobre catálogo/cotizaciones) | **No** — nunca usa OpenAI/ChatGPT |
+| **Asistente conversacional** (chatbot) | FAQs propias + OpenAI **opcional** | **No** — sin `OPENAI_API_KEY` opera solo con FAQs |
+
+La limitación del PG se interpreta así: el proyecto **no depende** de motores
+externos de pago para cumplir el alcance. OpenAI en el chatbot es una mejora
+opcional para preguntas libres; el entregable mínimo (FAQs + respaldo seguro)
+funciona sin costo externo.
+
+**Tope diario:** `OPENAI_DAILY_TOKEN_LIMIT` (default 100000 tokens/día). Al
+alcanzarlo, el bot deja de llamar a OpenAI, responde con FAQs/respaldo, avisa al
+usuario y registra `chatbot / limite_diario_ia` en bitácora (una vez por día).
+Admin → Chatbot → Métricas muestra el cupo del día.
 
 ---
 

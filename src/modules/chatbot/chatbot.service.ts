@@ -16,7 +16,7 @@ import type { AiChatMessage, IAiProvider } from './interfaces/ai-provider.interf
 import { UpsertFaqDto } from './dto/chatbot.dto';
 
 /** Origen de una respuesta del bot (para métricas y depuración). */
-export type ChatSource = 'faq' | 'ia' | 'fallback';
+export type ChatSource = 'faq' | 'ia' | 'fallback' | 'limite_diario';
 
 export interface ChatMessageMeta {
   ip?: string;
@@ -49,6 +49,8 @@ const HISTORY_TURNS_FOR_AI = 6;
 const MAX_CATALOG_MATCHES = 12;
 /** Tiempo de cache del catálogo activo en memoria (evita golpear la BD por mensaje). */
 const CATALOG_CACHE_MS = 60_000;
+/** Límite diario de tokens de IA (entrada+salida). 0 = sin tope. */
+const DEFAULT_DAILY_TOKEN_LIMIT = 100_000;
 
 @Injectable()
 export class ChatbotService {
@@ -56,6 +58,9 @@ export class ChatbotService {
 
   /** Control de abuso en memoria: IP -> ventana de peticiones. */
   private readonly rateLimit = new Map<string, { count: number; resetAt: number }>();
+
+  /** Evita spam en bitácora: un aviso por día calendario cuando se alcanza el tope. */
+  private dailyLimitNotifiedFor: string | null = null;
 
   /** Cache simple del catálogo activo para no consultarlo en cada mensaje. */
   private catalogCache: { data: ProductDto[]; expiresAt: number } | null = null;
@@ -65,6 +70,8 @@ export class ChatbotService {
   private readonly priceInputPer1M: number;
   private readonly priceOutputPer1M: number;
   private readonly model: string;
+  /** Tope diario de tokens IA (0 desactiva el control). */
+  private readonly dailyTokenLimit: number;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -82,6 +89,12 @@ export class ChatbotService {
       this.config.get<string>('OPENAI_PRICE_OUTPUT_PER_1M') ?? '0.60',
     );
     this.model = this.config.get<string>('OPENAI_MODEL') ?? 'gpt-4o-mini';
+    const rawLimit = Number(
+      this.config.get<string>('OPENAI_DAILY_TOKEN_LIMIT') ??
+        String(DEFAULT_DAILY_TOKEN_LIMIT),
+    );
+    this.dailyTokenLimit =
+      Number.isFinite(rawLimit) && rawLimit >= 0 ? rawLimit : DEFAULT_DAILY_TOKEN_LIMIT;
   }
 
   // ===========================================================================
@@ -148,8 +161,24 @@ export class ChatbotService {
       );
     }
 
-    // 2) IA controlada (si hay API key configurada).
+    // 2) IA controlada (si hay API key y no se alcanzó el tope diario de tokens).
     if (this.ai.isAvailable()) {
+      const daily = await this.getDailyAiUsage();
+      if (daily.reached) {
+        await this.notifyDailyLimitReached(daily, meta.ip);
+        const limitMsg = visitorName
+          ? `${visitorName}, por hoy alcancé el límite de consultas con asistente inteligente. ` +
+            'Podés usar las preguntas frecuentes del chat, revisar el catálogo o escribirnos por WhatsApp.'
+          : 'Por hoy alcancé el límite de consultas con asistente inteligente. ' +
+            'Podés usar las preguntas frecuentes del chat, revisar el catálogo o escribirnos por WhatsApp.';
+        return this.persistAndReturn(
+          conversation.id,
+          limitMsg,
+          'limite_diario',
+          suggestions,
+        );
+      }
+
       try {
         const aiMessages = await this.buildAiMessages(
           conversation.id,
@@ -270,6 +299,7 @@ export class ChatbotService {
 
     const promptTokens = tokenSums._sum.promptTokens ?? 0;
     const completionTokens = tokenSums._sum.completionTokens ?? 0;
+    const daily = await this.getDailyAiUsage();
 
     const bySource = bySourceRaw.map((s) => ({
       source: s.source ?? 'desconocido',
@@ -291,6 +321,13 @@ export class ChatbotService {
         prompt: promptTokens,
         completion: completionTokens,
         total: promptTokens + completionTokens,
+      },
+      dailyAi: {
+        usedTokens: daily.used,
+        limitTokens: daily.limit,
+        remainingTokens: daily.remaining,
+        reached: daily.reached,
+        enabled: daily.limit > 0,
       },
       cost: {
         model: this.model,
@@ -474,6 +511,66 @@ export class ChatbotService {
         'Demasiados mensajes en poco tiempo. Esperá un momento e intentá de nuevo.',
       );
     }
+  }
+
+  /** Consumo de tokens de IA del día calendario (UTC) y estado del tope. */
+  private async getDailyAiUsage(): Promise<{
+    used: number;
+    limit: number;
+    remaining: number;
+    reached: boolean;
+    dayKey: string;
+  }> {
+    const limit = this.dailyTokenLimit;
+    const dayKey = new Date().toISOString().slice(0, 10);
+    if (limit <= 0) {
+      return { used: 0, limit: 0, remaining: 0, reached: false, dayKey };
+    }
+
+    const start = new Date(`${dayKey}T00:00:00.000Z`);
+    const end = new Date(`${dayKey}T23:59:59.999Z`);
+    const sums = await this.prisma.chatMessage.aggregate({
+      where: {
+        role: 'assistant',
+        source: 'ia',
+        createdAt: { gte: start, lte: end },
+      },
+      _sum: { promptTokens: true, completionTokens: true },
+    });
+    const used =
+      (sums._sum.promptTokens ?? 0) + (sums._sum.completionTokens ?? 0);
+    const remaining = Math.max(0, limit - used);
+    return {
+      used,
+      limit,
+      remaining,
+      reached: used >= limit,
+      dayKey,
+    };
+  }
+
+  /** Registra en bitácora una sola vez por día cuando se agota el cupo de IA. */
+  private async notifyDailyLimitReached(
+    daily: { used: number; limit: number; dayKey: string },
+    ip?: string,
+  ): Promise<void> {
+    if (this.dailyLimitNotifiedFor === daily.dayKey) return;
+    this.dailyLimitNotifiedFor = daily.dayKey;
+    this.logger.warn(
+      `Tope diario de IA alcanzado (${daily.used}/${daily.limit} tokens) — día ${daily.dayKey}`,
+    );
+    await this.bitacora.registrar({
+      modulo: 'chatbot',
+      accion: 'limite_diario_ia',
+      ip,
+      detalles: {
+        usedTokens: daily.used,
+        limitTokens: daily.limit,
+        day: daily.dayKey,
+        mensaje:
+          'Se alcanzó el límite diario de tokens de OpenAI. El chatbot sigue con FAQs y respaldo.',
+      },
+    });
   }
 
   /**

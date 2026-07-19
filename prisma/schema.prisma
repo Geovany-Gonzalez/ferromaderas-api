@@ -95,18 +95,20 @@ model Category {
 // si activo=true → precio>0, categoría, imagen no vacía, pendiente_config=false.
 // Mantener coherente con ProductsService.canBeActive.
 model Product {
-  id            String   @id @default(uuid())
-  code          String   @unique @map("codigo")
-  name          String
-  price         Decimal  @db.Decimal(10, 2)
-  imageUrl      String?  @map("imagen_url")
-  categoryId    String?  @map("categoria_id")
-  active        Boolean  @default(true) @map("activo")
-  featured      Boolean  @default(false) @map("destacado")
-  pendingConfig Boolean  @default(false) @map("pendiente_config")
-  stock         Int      @default(0) @map("existencia")
-  createdAt     DateTime @default(now()) @map("creado_en")
-  updatedAt     DateTime @updatedAt @map("actualizado_en")
+  id                String   @id @default(uuid())
+  code              String   @unique @map("codigo")
+  name              String
+  price             Decimal  @db.Decimal(10, 2)
+  /** Precio promocional opcional; si es menor al precio de lista, aplica en catálogo y cotización. */
+  promotionalPrice  Decimal? @map("precio_promocional") @db.Decimal(10, 2)
+  imageUrl          String?  @map("imagen_url")
+  categoryId        String?  @map("categoria_id")
+  active            Boolean  @default(true) @map("activo")
+  featured          Boolean  @default(false) @map("destacado")
+  pendingConfig     Boolean  @default(false) @map("pendiente_config")
+  stock             Int      @default(0) @map("existencia")
+  createdAt         DateTime @default(now()) @map("creado_en")
+  updatedAt         DateTime @updatedAt @map("actualizado_en")
 
   category Category? @relation(fields: [categoryId], references: [id])
 

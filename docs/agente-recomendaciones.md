@@ -8,7 +8,13 @@ Alineado al **alcance punto 13** y **limitación 9** del proyecto de graduación
 
 > *"El sistema incluirá un **agente de inteligencia artificial** orientado a la recomendación de productos relacionados, el cual sugerirá artículos **complementarios o alternativos** con base en la **consulta del cliente**, la **categoría del producto** y la **relación entre artículos del catálogo**."*
 
-La **limitación 9** aclara que esta IA **no usa motores externos de pago** (no es ChatGPT para recomendaciones). Es un **agente propio** que razona sobre datos del negocio.
+La **limitación de IA** del PG aclara que el **agente de recomendaciones no usa
+motores externos de pago** (no es ChatGPT). Es un **agente propio** que razona
+sobre datos del negocio (catálogo + co-ocurrencia en cotizaciones).
+
+> Nota: el **chatbot** es otro componente. Puede usar OpenAI de forma **opcional**
+> para preguntas libres; sin API key opera solo con FAQs. Eso no contradice esta
+> limitación del agente de recomendaciones (ver `docs/chatbot.md`).
 
 ---
 

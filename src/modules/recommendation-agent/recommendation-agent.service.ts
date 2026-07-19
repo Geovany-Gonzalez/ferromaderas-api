@@ -346,6 +346,7 @@ export class RecommendationAgentService {
     code: string;
     name: string;
     price: { toString(): string };
+    promotionalPrice?: { toString(): string } | null;
     imageUrl: string | null;
     categoryId: string | null;
     active: boolean;
@@ -353,11 +354,21 @@ export class RecommendationAgentService {
     pendingConfig: boolean;
     stock: number;
   }): ProductDto {
+    const price = Number(p.price);
+    const promotionalPrice =
+      p.promotionalPrice != null ? Number(p.promotionalPrice) : null;
+    const onPromotion =
+      promotionalPrice != null &&
+      promotionalPrice > 0 &&
+      promotionalPrice < price;
     return {
       id: p.id,
       code: p.code,
       name: p.name,
-      price: Number(p.price),
+      price,
+      promotionalPrice: onPromotion ? promotionalPrice : null,
+      effectivePrice: onPromotion ? promotionalPrice! : price,
+      onPromotion,
       imageUrl: p.imageUrl ?? undefined,
       categoryId: p.categoryId ?? undefined,
       active: p.active,

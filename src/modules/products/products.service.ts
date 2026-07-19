@@ -7,7 +7,14 @@ export interface ProductDto {
   id: string;
   code: string;
   name: string;
+  /** Precio de lista (con IVA incluido). */
   price: number;
+  /** Precio promocional; null/undefined = sin promoción. */
+  promotionalPrice?: number | null;
+  /** Precio vigente para catálogo y cotización. */
+  effectivePrice: number;
+  /** true si hay promoción activa (precio promocional < lista). */
+  onPromotion: boolean;
   imageUrl?: string;
   categoryId?: string;
   active: boolean;
@@ -20,6 +27,7 @@ export interface CreateProductDto {
   code: string;
   name: string;
   price: number;
+  promotionalPrice?: number | null;
   imageUrl?: string;
   categoryId?: string;
   active?: boolean;
@@ -60,11 +68,29 @@ export class ProductsService {
     private readonly bitacora: BitacoraService,
   ) {}
 
+  private normalizePromotionalPrice(
+    listPrice: number,
+    promotionalPrice?: number | null,
+    allowClearInvalid = false,
+  ): number | null {
+    if (promotionalPrice == null || promotionalPrice === undefined) return null;
+    const promo = Number(promotionalPrice);
+    if (!Number.isFinite(promo) || promo <= 0) return null;
+    if (promo >= listPrice) {
+      if (allowClearInvalid) return null;
+      throw new BadRequestException(
+        'El precio promocional debe ser mayor a 0 y menor al precio de lista.',
+      );
+    }
+    return promo;
+  }
+
   private toDto(p: {
     id: string;
     code: string;
     name: string;
     price: Decimal;
+    promotionalPrice?: Decimal | null;
     imageUrl: string | null;
     categoryId: string | null;
     active: boolean;
@@ -72,11 +98,21 @@ export class ProductsService {
     pendingConfig: boolean;
     stock: number;
   }): ProductDto {
+    const price = Number(p.price);
+    const promotionalPrice =
+      p.promotionalPrice != null ? Number(p.promotionalPrice) : null;
+    const onPromotion =
+      promotionalPrice != null &&
+      promotionalPrice > 0 &&
+      promotionalPrice < price;
     return {
       id: p.id,
       code: p.code,
       name: p.name,
-      price: Number(p.price),
+      price,
+      promotionalPrice: onPromotion ? promotionalPrice : null,
+      effectivePrice: onPromotion ? promotionalPrice! : price,
+      onPromotion,
       imageUrl: p.imageUrl ?? undefined,
       categoryId: p.categoryId ?? undefined,
       active: p.active,
@@ -140,11 +176,18 @@ export class ProductsService {
     dto: CreateProductDto,
     meta?: ProductAuditMeta
   ): Promise<ProductDto> {
+    const promotionalPrice = this.normalizePromotionalPrice(
+      dto.price,
+      dto.promotionalPrice,
+    );
     const merged: ProductDto = {
       id: '',
       code: dto.code.trim(),
       name: dto.name.trim(),
       price: dto.price,
+      promotionalPrice,
+      effectivePrice: promotionalPrice ?? dto.price,
+      onPromotion: promotionalPrice != null,
       imageUrl: dto.imageUrl?.trim() || '',
       categoryId: dto.categoryId || undefined,
       active: dto.active ?? true,
@@ -163,6 +206,7 @@ export class ProductsService {
         code: merged.code,
         name: merged.name,
         price: merged.price,
+        promotionalPrice,
         imageUrl: dto.imageUrl?.trim() || null,
         categoryId: dto.categoryId || null,
         active: merged.active,
@@ -203,6 +247,7 @@ export class ProductsService {
       code: string;
       name: string;
       price: Decimal;
+      promotionalPrice?: Decimal | null;
       imageUrl: string | null;
       categoryId: string | null;
       active: boolean;
@@ -213,11 +258,23 @@ export class ProductsService {
     dto: Partial<CreateProductDto>
   ): ProductDto {
     const base = this.toDto(existing);
+    const price = dto.price !== undefined ? dto.price : base.price;
+    const promotionalPrice =
+      dto.promotionalPrice !== undefined
+        ? this.normalizePromotionalPrice(price, dto.promotionalPrice)
+        : this.normalizePromotionalPrice(
+            price,
+            base.promotionalPrice ?? null,
+            true,
+          );
     return {
       ...base,
       ...(dto.code !== undefined && { code: dto.code.trim() }),
       ...(dto.name !== undefined && { name: dto.name.trim() }),
-      ...(dto.price !== undefined && { price: dto.price }),
+      price,
+      promotionalPrice,
+      effectivePrice: promotionalPrice ?? price,
+      onPromotion: promotionalPrice != null,
       ...(dto.imageUrl !== undefined && {
         imageUrl: dto.imageUrl?.trim() || undefined,
       }),
@@ -254,6 +311,9 @@ export class ProductsService {
         ...(dto.code !== undefined && { code: dto.code.trim() }),
         ...(dto.name !== undefined && { name: dto.name.trim() }),
         ...(dto.price !== undefined && { price: dto.price }),
+        ...((dto.promotionalPrice !== undefined || dto.price !== undefined) && {
+          promotionalPrice: merged.promotionalPrice,
+        }),
         ...(dto.imageUrl !== undefined && {
           imageUrl: dto.imageUrl?.trim() || null,
         }),
